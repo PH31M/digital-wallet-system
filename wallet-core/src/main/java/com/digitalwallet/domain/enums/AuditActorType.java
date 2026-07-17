@@ -1,7 +1,8 @@
 package com.digitalwallet.domain.enums;
 
-public enum UserRole {
+public enum AuditActorType {
     USER,
     ADMIN,
-    SUPPORT
+    SUPPORT,
+    SYSTEM
 }

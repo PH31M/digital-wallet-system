@@ -1,72 +1,166 @@
 package com.digitalwallet.domain.entity;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+
+import com.digitalwallet.domain.enums.FraudDecision;
+import com.digitalwallet.domain.enums.TransactionType;
+import com.digitalwallet.domain.enums.TransactionStatus;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.FetchType;
 
 /**
  * Transaction entity.
  */
 @Entity
 @Table(name = "transactions")
-public class Transaction extends BaseEntity {
+public class Transaction extends BaseAuditableEntity {
+    @Column(name = "reference_number", nullable = false, unique = true)
+    private String referenceNumber;
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sender_wallet_id")
+    private Wallet senderWallet;
 
-    @Column(nullable = false)
-    private Long walletId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "receiver_wallet_id")
+    private Wallet receiverWallet;
 
-    @Column(nullable = false)
-    private String type;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "related_transaction_id")
+    private Transaction relatedTransaction;
 
-    @Column(nullable = false)
-    private Long amount;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "transaction_type", nullable = false, length = 20)
+    private TransactionType transactionType;
 
-    @Column(nullable = false)
-    private String status;
+    @Column(nullable = false, precision = 18, scale = 2)
+    private BigDecimal amount;
 
-    public Long getId() {
-        return id;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private TransactionStatus status = TransactionStatus.PENDING;
+
+    @Column(name = "fraud_score", precision = 5, scale = 2)
+    private BigDecimal fraudScore;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "fraud_decision", length = 20)
+    private FraudDecision fraudDecision;
+
+    @Column(name = "idempotency_key", unique = true)
+    private String idempotencyKey;
+
+    @Column(name = "completed_at")
+    private Instant completedAt;
+
+    @Column(name = "failed_at")
+    private Instant failedAt;
+
+    public String getReferenceNumber() {
+        return referenceNumber;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    public void setReferenceNumber(String referenceNumber) {
+        this.referenceNumber = referenceNumber;
     }
 
-    public Long getWalletId() {
-        return walletId;
+    public Wallet getSenderWallet() {
+        return senderWallet;
     }
 
-    public void setWalletId(Long walletId) {
-        this.walletId = walletId;
+    public void setSenderWallet(Wallet senderWallet) {
+        this.senderWallet = senderWallet;
     }
 
-    public String getType() {
-        return type;
+    public Wallet getReceiverWallet() {
+        return receiverWallet;
     }
 
-    public void setType(String type) {
-        this.type = type;
+    public void setReceiverWallet(Wallet receiverWallet) {
+        this.receiverWallet = receiverWallet;
     }
 
-    public Long getAmount() {
+    public Transaction getRelatedTransaction() {
+        return relatedTransaction;
+    }
+
+    public void setRelatedTransaction(Transaction relatedTransaction) {
+        this.relatedTransaction = relatedTransaction;
+    }
+
+    public TransactionType getTransactionType() {
+        return transactionType;
+    }
+
+    public void setTransactionType(TransactionType transactionType) {
+        this.transactionType = transactionType;
+    }
+
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(Long amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
-    public String getStatus() {
+    public TransactionStatus getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(TransactionStatus status) {
         this.status = status;
     }
+
+    public BigDecimal getFraudScore() {
+        return fraudScore;
+    }
+
+    public void setFraudScore(BigDecimal fraudScore) {
+        this.fraudScore = fraudScore;
+    }
+
+    public FraudDecision getFraudDecision() {
+        return fraudDecision;
+    }
+
+    public void setFraudDecision(FraudDecision fraudDecision) {
+        this.fraudDecision = fraudDecision;
+    }
+
+    public String getIdempotencyKey() {
+        return idempotencyKey;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
+    public Instant getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(Instant completedAt) {
+        this.completedAt = completedAt;
+    }
+
+    public Instant getFailedAt() {
+        return failedAt;
+    }
+
+    public void setFailedAt(Instant failedAt) {
+        this.failedAt = failedAt;
+    }
+
 }

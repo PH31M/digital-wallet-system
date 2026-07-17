@@ -1,10 +1,17 @@
 package com.digitalwallet.domain.entity;
 
+import java.math.BigDecimal;
+
+import com.digitalwallet.domain.enums.LedgerAccountType;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
 /**
@@ -14,48 +21,42 @@ import jakarta.persistence.Table;
 @Table(name = "ledger_entries")
 public class LedgerEntry extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "transaction_id", nullable = false)
+    private Transaction transaction;
 
-    @Column(nullable = false)
-    private Long transactionId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "wallet_id")
+    private Wallet wallet;
 
-    @Column(nullable = false)
-    private String description;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "account_type", nullable = false, length = 20)
+    private LedgerAccountType accountType;
 
-    @Column(nullable = false)
-    private Long amount;
+    @Column(name = "debit_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal debitAmount = BigDecimal.ZERO;
 
-    public Long getId() {
-        return id;
+    @Column(name = "credit_amount", nullable = false, precision = 18, scale = 2)
+    private BigDecimal creditAmount = BigDecimal.ZERO;
+
+    public Transaction getTransaction() {
+        return transaction;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    public Wallet getWallet() {
+        return wallet;
     }
 
-    public Long getTransactionId() {
-        return transactionId;
+    public LedgerAccountType getAccountType() {
+        return accountType;
     }
 
-    public void setTransactionId(Long transactionId) {
-        this.transactionId = transactionId;
+    public BigDecimal getDebitAmount() {
+        return debitAmount;
     }
 
-    public String getDescription() {
-        return description;
+    public BigDecimal getCreditAmount() {
+        return creditAmount;
     }
 
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public Long getAmount() {
-        return amount;
-    }
-
-    public void setAmount(Long amount) {
-        this.amount = amount;
-    }
 }

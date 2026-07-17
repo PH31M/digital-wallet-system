@@ -1,72 +1,128 @@
 package com.digitalwallet.domain.entity;
 
+import java.time.Instant;
+
+import com.digitalwallet.domain.enums.UserRole;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
 
-/**
- * User entity.
- */
 @Entity
 @Table(name = "users")
-public class User extends BaseEntity {
+public class User extends BaseAuditableEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, unique = true)
-    private String username;
-
-    @Column(nullable = false)
-    private String password;
-
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 254)
     private String email;
 
-    @Column(nullable = false)
-    private String role;
+    @Column(name = "full_name", nullable = false, length = 100)
+    private String fullName;
 
-    public Long getId() {
-        return id;
-    }
+    @Column(name = "phone_number", unique = true)
+    private String phoneNumber;
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
-    public String getUsername() {
-        return username;
-    }
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserRole role = UserRole.USER;
 
-    public void setUsername(String username) {
-        this.username = username;
-    }
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
 
-    public String getPassword() {
-        return password;
-    }
+    @Column(name = "is_active", nullable = false)
+    private Boolean isActive;
 
-    public void setPassword(String password) {
-        this.password = password;
-    }
+    @Column(name = "failed_login_attempts", nullable = false)
+    private Integer failedLoginAttempts = 0;
+
+    @Column(name = "locked_unitl")
+    private Instant lockedUnitl;
+
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
 
     public String getEmail() {
         return email;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public String getPhoneNumber() {
+        return phoneNumber;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public UserRole getRole() {
+        return role;
+    }
+
+    public Instant getEmailVerifiedAt() {
+        return emailVerifiedAt;
+    }
+
+    public Boolean getIsActive() {
+        return isActive;
+    }
+
+    public Integer getFailedLoginAttempts() {
+        return failedLoginAttempts;
+    }
+
+    public Instant getLockedUnitl() {
+        return lockedUnitl;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
     }
 
     public void setEmail(String email) {
         this.email = email;
     }
 
-    public String getRole() {
-        return role;
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
     }
 
-    public void setRole(String role) {
+    public void setPhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public void setRole(UserRole role) {
         this.role = role;
     }
+
+    public void setEmailVerifiedAt(Instant emailVerifiedAt) {
+        this.emailVerifiedAt = emailVerifiedAt;
+    }
+
+    public void setIsActive(Boolean isActive) {
+        this.isActive = isActive;
+    }
+
+    public void setFailedLoginAttempts(Integer failedLoginAttempts) {
+        this.failedLoginAttempts = failedLoginAttempts;
+    }
+
+    public void setLockedUnitl(Instant lockedUnitl) {
+        this.lockedUnitl = lockedUnitl;
+    }
+
+    public void setLastLoginAt(Instant lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
+    }
+
 }
