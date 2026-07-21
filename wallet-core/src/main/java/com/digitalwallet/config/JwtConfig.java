@@ -14,6 +14,7 @@ public class JwtConfig {
 
     private String secret = "change-me";
     private long expirationMs = 3600000;
+    private long refreshExpirationMs = 604800000;
 
     public String getSecret() {
         return secret;
@@ -29,5 +30,13 @@ public class JwtConfig {
 
     public void setExpirationMs(long expirationMs) {
         this.expirationMs = expirationMs;
+    }
+
+    public long getRefreshExpirationMs() {
+        return refreshExpirationMs;
+    }
+
+    public void setRefreshExpirationMs(long refreshExpirationMs) {
+        this.refreshExpirationMs = refreshExpirationMs;
     }
 }
