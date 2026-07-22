@@ -14,6 +14,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.util.UUID;
 
 /**
@@ -39,9 +42,11 @@ public class AuditLog extends BaseEntity {
     @Column(name = "resource_id", nullable = false)
     private UUID resourceId;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "before_state", columnDefinition = "jsonb")
     private String beforeStateJson;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "after_state", columnDefinition = "jsonb")
     private String afterStateJson;
 
@@ -90,20 +95,40 @@ public class AuditLog extends BaseEntity {
         return beforeStateJson;
     }
 
+    public void setBeforeStateJson(String beforeStateJson) {
+        this.beforeStateJson = beforeStateJson;
+    }
+
     public String getAfterStateJson() {
         return afterStateJson;
+    }
+
+    public void setAfterStateJson(String afterStateJson) {
+        this.afterStateJson = afterStateJson;
     }
 
     public String getIpAddress() {
         return ipAddress;
     }
 
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+
     public String getUserAgent() {
         return userAgent;
     }
 
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
+    }
+
     public UUID getRequestId() {
         return requestId;
+    }
+
+    public void setRequestId(UUID requestId) {
+        this.requestId = requestId;
     }
 
 }

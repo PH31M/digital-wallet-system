@@ -34,13 +34,13 @@ public class User extends BaseAuditableEntity {
     private Instant emailVerifiedAt;
 
     @Column(name = "is_active", nullable = false)
-    private Boolean isActive;
+    private Boolean isActive = true;
 
     @Column(name = "failed_login_attempts", nullable = false)
     private Integer failedLoginAttempts = 0;
 
-    @Column(name = "locked_unitl")
-    private Instant lockedUnitl;
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
@@ -77,8 +77,8 @@ public class User extends BaseAuditableEntity {
         return failedLoginAttempts;
     }
 
-    public Instant getLockedUnitl() {
-        return lockedUnitl;
+    public Instant getLockedUntil() {
+        return lockedUntil;
     }
 
     public Instant getLastLoginAt() {
@@ -117,8 +117,8 @@ public class User extends BaseAuditableEntity {
         this.failedLoginAttempts = failedLoginAttempts;
     }
 
-    public void setLockedUnitl(Instant lockedUnitl) {
-        this.lockedUnitl = lockedUnitl;
+    public void setLockedUntil(Instant lockedUntil) {
+        this.lockedUntil = lockedUntil;
     }
 
     public void setLastLoginAt(Instant lastLoginAt) {

@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
 /**
  * Wallet REST controller.
  */
@@ -16,8 +19,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class WalletController {
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<WalletResponse>> getWallet(@PathVariable("id") Long id) {
-        WalletResponse wallet = new WalletResponse(id, "WALLET-123", "ACTIVE", 0L);
+    public ResponseEntity<ApiResponse<WalletResponse>> getWallet(@PathVariable("id") UUID id) {
+        WalletResponse wallet = new WalletResponse(id, "VND", "ACTIVE", BigDecimal.ZERO);
         return ResponseEntity.ok(new ApiResponse<>(true, "Wallet found", wallet));
     }
 }
