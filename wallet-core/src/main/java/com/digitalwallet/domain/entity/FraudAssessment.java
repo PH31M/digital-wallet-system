@@ -7,6 +7,9 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "fraud_assessments")
 public class FraudAssessment extends BaseEntity {
@@ -27,6 +30,7 @@ public class FraudAssessment extends BaseEntity {
     @Column(name = "model_version", nullable = false)
     private String modelVersion;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "triggered_rules", columnDefinition = "jsonb")
     private String triggeredRulesJson;
 

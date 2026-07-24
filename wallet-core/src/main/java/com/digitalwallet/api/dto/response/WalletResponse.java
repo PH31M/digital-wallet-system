@@ -1,39 +1,42 @@
 package com.digitalwallet.api.dto.response;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
 /**
  * Wallet response payload.
  */
 public class WalletResponse {
 
-    private Long id;
-    private String walletNumber;
+    private UUID id;
+    private String currency;
     private String status;
-    private Long balance;
+    private BigDecimal balance;
 
     public WalletResponse() {
     }
 
-    public WalletResponse(Long id, String walletNumber, String status, Long balance) {
+    public WalletResponse(UUID id, String currency, String status, BigDecimal balance) {
         this.id = id;
-        this.walletNumber = walletNumber;
+        this.currency = currency;
         this.status = status;
         this.balance = balance;
     }
 
-    public Long getId() {
+    public UUID getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(UUID id) {
         this.id = id;
     }
 
-    public String getWalletNumber() {
-        return walletNumber;
+    public String getCurrency() {
+        return currency;
     }
 
-    public void setWalletNumber(String walletNumber) {
-        this.walletNumber = walletNumber;
+    public void setCurrency(String currency) {
+        this.currency = currency;
     }
 
     public String getStatus() {
@@ -44,11 +47,11 @@ public class WalletResponse {
         this.status = status;
     }
 
-    public Long getBalance() {
+    public BigDecimal getBalance() {
         return balance;
     }
 
-    public void setBalance(Long balance) {
+    public void setBalance(BigDecimal balance) {
         this.balance = balance;
     }
 }

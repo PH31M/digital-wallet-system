@@ -23,7 +23,7 @@ import com.digitalwallet.domain.enums.WalletStatus;
 public class Wallet extends BaseAuditableEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_wallet_user", foreignKeyDefinition = "FOREIGN KEY (user_id) REFERENCE users(id) ON DELETE RESTRICT"))
+    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_wallet_user", foreignKeyDefinition = "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT"))
     private User user;
 
     @Column(nullable = false, length = 3)

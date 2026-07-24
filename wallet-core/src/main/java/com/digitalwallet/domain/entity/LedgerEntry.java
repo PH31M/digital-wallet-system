@@ -21,6 +21,18 @@ import jakarta.persistence.Table;
 @Table(name = "ledger_entries")
 public class LedgerEntry extends BaseEntity {
 
+    protected LedgerEntry() {
+    }
+
+    public LedgerEntry(Transaction transaction, Wallet wallet, LedgerAccountType accountType,
+            BigDecimal debitAmount, BigDecimal creditAmount) {
+        this.transaction = transaction;
+        this.wallet = wallet;
+        this.accountType = accountType;
+        this.debitAmount = debitAmount;
+        this.creditAmount = creditAmount;
+    }
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "transaction_id", nullable = false)
     private Transaction transaction;
@@ -43,20 +55,40 @@ public class LedgerEntry extends BaseEntity {
         return transaction;
     }
 
+    public void setTransaction(Transaction transaction) {
+        this.transaction = transaction;
+    }
+
     public Wallet getWallet() {
         return wallet;
+    }
+
+    public void setWallet(Wallet wallet) {
+        this.wallet = wallet;
     }
 
     public LedgerAccountType getAccountType() {
         return accountType;
     }
 
+    public void setAccountType(LedgerAccountType accountType) {
+        this.accountType = accountType;
+    }
+
     public BigDecimal getDebitAmount() {
         return debitAmount;
     }
 
+    public void setDebitAmount(BigDecimal debitAmount) {
+        this.debitAmount = debitAmount;
+    }
+
     public BigDecimal getCreditAmount() {
         return creditAmount;
+    }
+
+    public void setCreditAmount(BigDecimal creditAmount) {
+        this.creditAmount = creditAmount;
     }
 
 }
