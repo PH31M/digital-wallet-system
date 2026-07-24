@@ -6,6 +6,6 @@ package com.digitalwallet.exception;
 public class DailyLimitExceededException extends DigitalWalletException {
 
     public DailyLimitExceededException(String message) {
-        super(message);
+        super(ErrorCode.DAILY_LIMIT_EXCEEDED, message);
     }
 }

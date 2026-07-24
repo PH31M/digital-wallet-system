@@ -3,13 +3,13 @@ package com.digitalwallet.exception;
 /**
  * Base custom exception for wallet application errors.
  */
-public class DigitalWalletException extends RuntimeException {
+public abstract class DigitalWalletException extends BusinessException {
 
-    public DigitalWalletException(String message) {
-        super(message);
+    protected DigitalWalletException(ErrorCode errorCode, String message) {
+        super(errorCode, message);
     }
 
-    public DigitalWalletException(String message, Throwable cause) {
-        super(message, cause);
+    protected DigitalWalletException(ErrorCode errorCode, String message, Throwable cause) {
+        super(errorCode, message, cause);
     }
 }
