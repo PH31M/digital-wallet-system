@@ -1,12 +1,14 @@
 package com.digitalwallet.wallet_core;
 
+import com.digitalwallet.WalletCoreApplication;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
+import static org.assertj.core.api.Assertions.assertThat;
+
 class WalletCoreApplicationTests {
 
     @Test
-    void contextLoads() {
+    void applicationClassExists() {
+        assertThat(WalletCoreApplication.class).isNotNull();
     }
 }

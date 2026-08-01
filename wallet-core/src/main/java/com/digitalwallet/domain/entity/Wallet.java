@@ -67,4 +67,16 @@ public class Wallet extends BaseAuditableEntity {
     public void setStatus(WalletStatus status) {
         this.status = status;
     }
+
+    public void activate() {
+        this.status = WalletStatus.ACTIVE;
+    }
+
+    public void credit(BigDecimal amount) {
+        this.balance = this.balance.add(amount);
+    }
+
+    public void debit(BigDecimal amount) {
+        this.balance = this.balance.subtract(amount);
+    }
 }

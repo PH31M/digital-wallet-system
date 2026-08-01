@@ -163,4 +163,14 @@ public class Transaction extends BaseAuditableEntity {
         this.failedAt = failedAt;
     }
 
+    public void complete() {
+        this.status = TransactionStatus.COMPLETED;
+        this.completedAt = Instant.now();
+    }
+
+    public void fail() {
+        this.status = TransactionStatus.FAILED;
+        this.failedAt = Instant.now();
+    }
+
 }

@@ -39,7 +39,11 @@ public class ApiResponse<T> {
     }
 
     public static <T> ApiResponse<T> error(String code, String message, String field, String requestId) {
-        ErrorInfo errorInfo = new ErrorInfo(code, message, null, Instant.now(), field);
+        return error(code, message, field, null, requestId);
+    }
+
+    public static <T> ApiResponse<T> error(String code, String message, String field, String path, String requestId) {
+        ErrorInfo errorInfo = new ErrorInfo(code, message, path, Instant.now(), field);
         return new ApiResponse<>(false, requestId, Instant.now(), null, errorInfo);
     }
 

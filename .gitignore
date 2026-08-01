@@ -216,3 +216,33 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Java / Spring Boot / Maven
+.mvn/timing.properties
+**/target/
+*.class
+
+# GitHub modernization tool output
+.github/modernize/
+**/.github/modernize/
+
+# Local runtime logs
+logs/
+*.log
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Local debug/build output
+mvn-debug.txt
+compile-log.txt
+compile-output.txt
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
