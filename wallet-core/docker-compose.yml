@@ -15,6 +15,12 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-123456}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
       JAVA_OPTS: "-Xms256m -Xmx512m"
     depends_on:
       postgres:
@@ -50,7 +56,26 @@ services:
     container_name: wallet-redis
     networks:
       - wallet-network
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: dws-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - wallet-network
 
 networks:
   wallet-network:
@@ -58,3 +83,4 @@ networks:
 
 volumes:
   postgres-data:
+  redis-data:

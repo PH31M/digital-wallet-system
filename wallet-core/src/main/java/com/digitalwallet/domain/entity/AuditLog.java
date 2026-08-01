@@ -1,5 +1,6 @@
 package com.digitalwallet.domain.entity;
 
+import com.digitalwallet.domain.enums.AuditAction;
 import com.digitalwallet.domain.enums.AuditActorType;
 
 import jakarta.persistence.Column;
@@ -7,24 +8,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import java.util.UUID;
 
-/**
- * Audit log entity.
- */
 @Entity
 @Table(name = "audit_logs")
-public class AuditLog extends BaseEntity {
+public class AuditLog extends BaseEntity { // id + createdAt kế thừa từ đây, KHÔNG khai báo lại
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "actor_id") // null nếu action tự động (SYSTEM)
     private User actor;
@@ -33,22 +26,15 @@ public class AuditLog extends BaseEntity {
     @Column(name = "actor_type", nullable = false, length = 20)
     private AuditActorType actorType;
 
-    @Column(nullable = false)
-    private String action; // VD: "TRANSFER_COMPLETED", "ADMIN_REFUND" (F-020)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "action", nullable = false, length = 50)
+    private AuditAction actionType;
 
     @Column(name = "resource_type", nullable = false)
     private String resourceType;
 
     @Column(name = "resource_id", nullable = false)
     private UUID resourceId;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "before_state", columnDefinition = "jsonb")
-    private String beforeStateJson;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "after_state", columnDefinition = "jsonb")
-    private String afterStateJson;
 
     @Column(name = "ip_address")
     private String ipAddress;
@@ -62,13 +48,26 @@ public class AuditLog extends BaseEntity {
     protected AuditLog() {
     }
 
-    public AuditLog(User actor, AuditActorType actorType, String action,
-            String resourceType, UUID resourceId) {
+    private AuditLog(User actor, AuditActorType actorType, AuditAction actionType,
+            String resourceType, UUID resourceId, String ipAddress,
+            String userAgent, UUID requestId) {
         this.actor = actor;
         this.actorType = actorType;
-        this.action = action;
+        this.actionType = actionType;
         this.resourceType = resourceType;
         this.resourceId = resourceId;
+        this.ipAddress = ipAddress;
+        this.userAgent = userAgent;
+        this.requestId = requestId;
+        // createdAt tự set trong BaseEntity (@PrePersist)
+    }
+
+    // Chỉ getter — KHÔNG setter nào, đảm bảo append-only
+    public static AuditLog of(User actor, AuditActorType actorType, AuditAction actionType,
+            String resourceType, UUID resourceId, String ipAddress,
+            String userAgent, UUID requestId) {
+        return new AuditLog(actor, actorType, actionType, resourceType, resourceId,
+                ipAddress, userAgent, requestId);
     }
 
     public User getActor() {
@@ -79,8 +78,8 @@ public class AuditLog extends BaseEntity {
         return actorType;
     }
 
-    public String getAction() {
-        return action;
+    public AuditAction getAction() {
+        return actionType;
     }
 
     public String getResourceType() {
@@ -91,44 +90,15 @@ public class AuditLog extends BaseEntity {
         return resourceId;
     }
 
-    public String getBeforeStateJson() {
-        return beforeStateJson;
-    }
-
-    public void setBeforeStateJson(String beforeStateJson) {
-        this.beforeStateJson = beforeStateJson;
-    }
-
-    public String getAfterStateJson() {
-        return afterStateJson;
-    }
-
-    public void setAfterStateJson(String afterStateJson) {
-        this.afterStateJson = afterStateJson;
-    }
-
     public String getIpAddress() {
         return ipAddress;
-    }
-
-    public void setIpAddress(String ipAddress) {
-        this.ipAddress = ipAddress;
     }
 
     public String getUserAgent() {
         return userAgent;
     }
 
-    public void setUserAgent(String userAgent) {
-        this.userAgent = userAgent;
-    }
-
     public UUID getRequestId() {
         return requestId;
     }
-
-    public void setRequestId(UUID requestId) {
-        this.requestId = requestId;
-    }
-
 }

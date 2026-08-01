@@ -1,6 +1,7 @@
 package com.digitalwallet.domain.entity;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import com.digitalwallet.domain.enums.UserRole;
 
@@ -13,6 +14,9 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "users")
 public class User extends BaseAuditableEntity {
+
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
+    private static final int LOCK_DURATION_MINUTES = 15;
 
     @Column(nullable = false, unique = true, length = 254)
     private String email;
@@ -44,6 +48,12 @@ public class User extends BaseAuditableEntity {
 
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
+
+    @Column(name = "token_version", nullable = false)
+    private Integer tokenVersion = 0;
+
+    @Column(name = "mfa_enabled", nullable = false)
+    private Boolean mfaEnabled = false;
 
     public String getEmail() {
         return email;
@@ -85,6 +95,14 @@ public class User extends BaseAuditableEntity {
         return lastLoginAt;
     }
 
+    public Integer getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public Boolean getMfaEnabled() {
+        return mfaEnabled;
+    }
+
     public void setEmail(String email) {
         this.email = email;
     }
@@ -123,6 +141,53 @@ public class User extends BaseAuditableEntity {
 
     public void setLastLoginAt(Instant lastLoginAt) {
         this.lastLoginAt = lastLoginAt;
+    }
+
+    public void setTokenVersion(Integer tokenVersion) {
+        this.tokenVersion = tokenVersion;
+    }
+
+    public void setMfaEnabled(Boolean mfaEnabled) {
+        this.mfaEnabled = mfaEnabled;
+    }
+
+    public void recordFailedLogin() {
+        this.failedLoginAttempts = this.failedLoginAttempts == null ? 1 : this.failedLoginAttempts + 1;
+        if (this.failedLoginAttempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+            this.lockedUntil = Instant.now().plus(LOCK_DURATION_MINUTES, ChronoUnit.MINUTES);
+        }
+    }
+
+    public void recordSuccessfulLogin() {
+        this.failedLoginAttempts = 0;
+        this.lockedUntil = null;
+        this.lastLoginAt = Instant.now();
+    }
+
+    public void markAsVerified() {
+        if (this.emailVerifiedAt == null) {
+            this.emailVerifiedAt = Instant.now();
+        }
+    }
+
+    public void updateProfile(String fullName, String phoneNumber) {
+        if (fullName != null) {
+            this.fullName = fullName.trim();
+        }
+        this.phoneNumber = phoneNumber;
+    }
+
+    public void changePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        incrementTokenVersion();
+    }
+
+    public void incrementTokenVersion() {
+        this.tokenVersion = this.tokenVersion == null ? 1 : this.tokenVersion + 1;
+    }
+
+    public boolean isCurrentlyLocked() {
+        return lockedUntil != null && lockedUntil.isAfter(Instant.now());
     }
 
 }

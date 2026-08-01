@@ -6,6 +6,6 @@ package com.digitalwallet.exception;
 public class InsufficientBalanceException extends DigitalWalletException {
 
     public InsufficientBalanceException(String message) {
-        super(message);
+        super(ErrorCode.INSUFFICIENT_BALANCE, message);
     }
 }

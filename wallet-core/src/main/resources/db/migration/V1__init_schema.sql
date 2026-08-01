@@ -141,7 +141,7 @@ create table audit_logs (
     user_agent text,
     request_id uuid,
     constraint fk_audit_logs_actor foreign key (actor_id) references users(id),
-    constraint chk_audit_logs_actor_type check (actor_type in ('USER', 'ADMIN', 'SUPPORT', 'SYSTEM'))
+    constraint chk_audit_logs_actor_type check (actor_type in ('USER', 'ADMIN', 'SYSTEM'))
 );
 
 create index idx_wallets_user_id on wallets(user_id);

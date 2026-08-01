@@ -6,6 +6,6 @@ package com.digitalwallet.exception;
 public class ReceiverNotFoundException extends DigitalWalletException {
 
     public ReceiverNotFoundException(String message) {
-        super(message);
+        super(ErrorCode.RESOURCE_NOT_FOUND, message);
     }
 }

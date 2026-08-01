@@ -1,12 +1,27 @@
 package com.digitalwallet.api.dto.request;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+
 /**
  * Login request payload.
  */
 public class LoginRequest {
 
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email is invalid")
     private String email;
+
+    @NotBlank(message = "Password is required")
     private String password;
+
+    public LoginRequest() {
+    }
+
+    public LoginRequest(String email, String password) {
+        this.email = email;
+        this.password = password;
+    }
 
     public String getEmail() {
         return email;

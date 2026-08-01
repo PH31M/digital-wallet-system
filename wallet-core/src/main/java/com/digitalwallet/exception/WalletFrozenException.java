@@ -6,6 +6,6 @@ package com.digitalwallet.exception;
 public class WalletFrozenException extends DigitalWalletException {
 
     public WalletFrozenException(String message) {
-        super(message);
+        super(ErrorCode.WALLET_FROZEN, message);
     }
 }
