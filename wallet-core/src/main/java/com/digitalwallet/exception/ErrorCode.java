@@ -41,6 +41,8 @@ public enum ErrorCode {
             "Unexpected internal server error"),
 
     BUSINESS_RULE_VIOLATION("BUSINESS_RULE_VIOLATION", HttpStatus.BAD_REQUEST, "Business rule violated"),
+    FRAUD_REVIEW_NOT_PENDING("FRAUD_REVIEW_NOT_PENDING", HttpStatus.CONFLICT,
+            "Fraud assessment is not pending review"),
     FRAUD_BLOCKED("FRAUD_BLOCKED", HttpStatus.BAD_REQUEST, "Transaction blocked by fraud rules"),
     INSUFFICIENT_BALANCE("INSUFFICIENT_BALANCE", HttpStatus.BAD_REQUEST, "Insufficient balance"),
     DAILY_LIMIT_EXCEEDED("DAILY_LIMIT_EXCEEDED", HttpStatus.BAD_REQUEST, "Daily transaction limit exceeded"),

@@ -163,6 +163,14 @@ public class Transaction extends BaseAuditableEntity {
         this.failedAt = failedAt;
     }
 
+    public void awaitReview() {
+        this.status = TransactionStatus.PENDING_REVIEW;
+    }
+
+    public boolean isPendingReview() {
+        return status == TransactionStatus.PENDING_REVIEW;
+    }
+
     public void complete() {
         this.status = TransactionStatus.COMPLETED;
         this.completedAt = Instant.now();

@@ -1,9 +1,14 @@
 package com.digitalwallet.service;
 
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.mail.MailException;
+import org.springframework.mail.MailPreparationException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -36,19 +41,35 @@ public class EmailService {
                 "Ma OTP dang nhap cua ban la: %s".formatted(otp));
     }
 
+    public void sendSimpleEmail(String toEmail, String subject, String text) throws MailException {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(toEmail);
+        message.setSubject(subject);
+        message.setText(text);
+        mailSender.send(message);
+    }
+
+    public void sendHtmlEmail(String toEmail, String subject, String html) throws MailException {
+        MimeMessage message = mailSender.createMimeMessage();
+        try {
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setTo(toEmail);
+            helper.setSubject(subject);
+            helper.setText(html, true);
+            mailSender.send(message);
+        } catch (MessagingException ex) {
+            throw new MailPreparationException("Failed to prepare HTML email", ex);
+        }
+    }
+
     private void sendOtpEmail(String toEmail, String subject, String firstLine) {
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(toEmail);
-            message.setSubject(subject);
-            message.setText("""
+            sendSimpleEmail(toEmail, subject, """
                     %s
 
                     Ma co hieu luc trong 10 phut. Vui long khong chia se ma nay voi bat ky ai.
                     """.formatted(firstLine));
-
-            mailSender.send(message);
-        } catch (Exception ex) {
+        } catch (MailException ex) {
             log.error("Failed to send OTP email to {}", toEmail, ex);
         }
     }

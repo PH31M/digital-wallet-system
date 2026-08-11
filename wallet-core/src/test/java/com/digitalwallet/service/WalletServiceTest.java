@@ -12,10 +12,13 @@ import com.digitalwallet.domain.entity.Wallet;
 import com.digitalwallet.domain.enums.AuditAction;
 import com.digitalwallet.domain.enums.AuditActorType;
 import com.digitalwallet.domain.enums.FraudDecision;
-import com.digitalwallet.domain.enums.NotificationType;
 import com.digitalwallet.domain.enums.TransactionType;
 import com.digitalwallet.domain.enums.UserRole;
 import com.digitalwallet.domain.enums.WalletStatus;
+import com.digitalwallet.domain.event.BalanceUpdatedEvent;
+import com.digitalwallet.domain.event.FraudAlertEvent;
+import com.digitalwallet.domain.event.TransactionCompletedEvent;
+import com.digitalwallet.domain.event.TransactionFailedEvent;
 import com.digitalwallet.domain.repository.LedgerEntryRepository;
 import com.digitalwallet.domain.repository.TransactionRepository;
 import com.digitalwallet.domain.repository.WalletRepository;
@@ -28,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -66,7 +70,7 @@ class WalletServiceTest {
     private AuditService auditService;
 
     @Mock
-    private NotificationService notificationService;
+    private ApplicationEventPublisher eventPublisher;
 
     @Test
     void deposit_creditsWalletWritesBalancedLedgerAndEmitsControls() {
@@ -91,7 +95,8 @@ class WalletServiceTest {
         verify(fraudService).assess(any(Transaction.class));
         verify(auditService).log(eq(user), eq(AuditActorType.USER), eq(AuditAction.DEPOSIT_COMPLETED),
                 eq("TRANSACTION"), any(), eq("127.0.0.1"), eq("JUnit"), eq(metadata.requestId()));
-        verify(notificationService).transactionCompleted(eq(user), eq(NotificationType.DEPOSIT_SUCCESS), any(Transaction.class));
+        verifyPublishedEvent(BalanceUpdatedEvent.class);
+        verifyPublishedEvent(TransactionCompletedEvent.class);
     }
 
     @Test
@@ -136,7 +141,7 @@ class WalletServiceTest {
         verify(transactionRepository).save(any(Transaction.class));
         verify(auditService).log(eq(user), eq(AuditActorType.USER), eq(AuditAction.TRANSACTION_FAILED),
                 eq("TRANSACTION"), any(), eq("127.0.0.1"), eq("JUnit"), eq(metadata.requestId()));
-        verify(notificationService).transactionFailed(eq(user), any(Transaction.class), eq("Daily transaction limit exceeded"));
+        verifyPublishedEvent(TransactionFailedEvent.class);
         verify(ledgerEntryRepository, never()).saveAll(any());
         verify(fraudService, never()).assess(any(Transaction.class));
     }
@@ -168,8 +173,8 @@ class WalletServiceTest {
         verify(transactionLimitService).assertWithinDailyLimit(receiverWallet, request.getAmount());
         verify(auditService).log(eq(sender), eq(AuditActorType.USER), eq(AuditAction.TRANSFER_COMPLETED),
                 eq("TRANSACTION"), any(), eq("127.0.0.1"), eq("JUnit"), eq(metadata.requestId()));
-        verify(notificationService).transactionCompleted(eq(sender), eq(NotificationType.TRANSFER_SENT), any(Transaction.class));
-        verify(notificationService).transactionCompleted(eq(receiver), eq(NotificationType.TRANSFER_RECEIVED), any(Transaction.class));
+        verifyPublishedEvent(BalanceUpdatedEvent.class, 2);
+        verifyPublishedEvent(TransactionCompletedEvent.class);
     }
 
     @Test
@@ -199,13 +204,13 @@ class WalletServiceTest {
         verify(transactionRepository, times(2)).save(any(Transaction.class));
         verify(auditService).log(eq(sender), eq(AuditActorType.USER), eq(AuditAction.FRAUD_BLOCKED),
                 eq("TRANSACTION"), any(), eq("127.0.0.1"), eq("JUnit"), eq(metadata.requestId()));
-        verify(notificationService).fraudAlert(eq(sender), any(Transaction.class));
-        verify(notificationService).transactionFailed(eq(sender), any(Transaction.class), eq(ErrorCode.FRAUD_BLOCKED.getDefaultMessage()));
+        verifyPublishedEvent(FraudAlertEvent.class);
+        verifyPublishedEvent(TransactionFailedEvent.class);
         verify(ledgerEntryRepository, never()).saveAll(any());
     }
 
     @Test
-    void transfer_fraudChallengeAllowsTransferButAddsFraudAlert() {
+    void transfer_fraudChallengeHoldsTransactionForReviewWithoutMovingFunds() {
         WalletService walletService = walletService();
         RequestMetadata metadata = metadata();
         User sender = user();
@@ -223,14 +228,15 @@ class WalletServiceTest {
 
         TransactionResponse response = walletService.transfer(sender, request, metadata);
 
-        assertThat(response.getStatus()).isEqualTo("COMPLETED");
-        assertThat(senderWallet.getBalance()).isEqualByComparingTo("70.00");
-        assertThat(receiverWallet.getBalance()).isEqualByComparingTo("35.00");
+        assertThat(response.getStatus()).isEqualTo("PENDING_REVIEW");
+        assertThat(senderWallet.getBalance()).isEqualByComparingTo("100.00");
+        assertThat(receiverWallet.getBalance()).isEqualByComparingTo("5.00");
         verify(auditService).log(eq(sender), eq(AuditActorType.USER), eq(AuditAction.FRAUD_CHALLENGE),
                 eq("TRANSACTION"), any(), eq("127.0.0.1"), eq("JUnit"), eq(metadata.requestId()));
-        verify(notificationService).fraudAlert(eq(sender), any(Transaction.class));
-        verify(notificationService).transactionCompleted(eq(sender), eq(NotificationType.TRANSFER_SENT), any(Transaction.class));
-        verify(notificationService).transactionCompleted(eq(receiver), eq(NotificationType.TRANSFER_RECEIVED), any(Transaction.class));
+        verifyPublishedEvent(FraudAlertEvent.class);
+        verify(eventPublisher, never()).publishEvent(any(BalanceUpdatedEvent.class));
+        verify(eventPublisher, never()).publishEvent(any(TransactionCompletedEvent.class));
+        verify(ledgerEntryRepository, never()).saveAll(any());
     }
 
     @Test
@@ -251,7 +257,7 @@ class WalletServiceTest {
 
     private WalletService walletService() {
         return new WalletService(walletRepository, transactionRepository, ledgerEntryRepository,
-                fraudService, transactionLimitService, auditService, notificationService);
+                fraudService, transactionLimitService, auditService, eventPublisher);
     }
 
     private RequestMetadata metadata() {
@@ -284,6 +290,14 @@ class WalletServiceTest {
         FraudAssessment assessment = new FraudAssessment();
         assessment.setDecision(decision);
         return assessment;
+    }
+
+    private void verifyPublishedEvent(Class<?> eventType) {
+        verifyPublishedEvent(eventType, 1);
+    }
+
+    private void verifyPublishedEvent(Class<?> eventType, int times) {
+        verify(eventPublisher, times(times)).publishEvent(any(eventType));
     }
 
     private void assertBalancedLedger(String amount) {

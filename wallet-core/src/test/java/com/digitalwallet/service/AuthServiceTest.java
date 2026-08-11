@@ -475,6 +475,7 @@ class AuthServiceTest {
 
         when(jwtTokenProvider.getExpiration("valid-refresh-token")).thenReturn(Instant.now().plusSeconds(500000));
         when(jwtTokenProvider.getEmail("valid-refresh-token")).thenReturn("user@example.com");
+        when(httpRequest.getHeader("Authorization")).thenReturn(null);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
         when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
         when(httpRequest.getRemoteAddr()).thenReturn("127.0.0.1");
@@ -499,8 +500,13 @@ class AuthServiceTest {
         when(jwtTokenProvider.isValid("valid-access-token")).thenReturn(true);
         when(jwtTokenProvider.isAccessToken("valid-access-token")).thenReturn(true);
         when(jwtTokenProvider.getExpiration("valid-access-token")).thenReturn(Instant.now().plusSeconds(900));
-        org.mockito.Mockito.doThrow(new BusinessException(ErrorCode.TOKEN_BLACKLIST_UNAVAILABLE))
-                .when(tokenBlacklistService).blacklist(eq("valid-access-token"), any(Duration.class));
+        org.mockito.Mockito.doAnswer(invocation -> {
+                    if ("valid-access-token".equals(invocation.getArgument(0))) {
+                        throw new BusinessException(ErrorCode.TOKEN_BLACKLIST_UNAVAILABLE);
+                    }
+                    return null;
+                })
+                .when(tokenBlacklistService).blacklist(any(), any(Duration.class));
 
         assertThatThrownBy(() -> authService.logout("valid-refresh-token", httpRequest))
                 .isInstanceOf(BusinessException.class)

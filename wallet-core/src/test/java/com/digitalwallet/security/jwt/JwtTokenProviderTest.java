@@ -62,7 +62,7 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    void token_containsUserIdAndRoleClaims() {
+    void token_containsUserIdPublicIdAndRoleClaims() {
         JwtTokenProvider provider = provider(60 * 60 * 1000L, 7L * 24 * 60 * 60 * 1000);
         User user = user("user@example.com");
 
@@ -70,6 +70,7 @@ class JwtTokenProviderTest {
         Claims claims = provider.parseClaims(token);
 
         assertThat(claims.get("userId", String.class)).isEqualTo(user.getId().toString());
+        assertThat(claims.get("public_id", String.class)).isEqualTo(user.getPublicId().toString());
         assertThat(claims.get("role", String.class)).isEqualTo("USER");
         assertThat(claims.getSubject()).isEqualTo("user@example.com");
     }

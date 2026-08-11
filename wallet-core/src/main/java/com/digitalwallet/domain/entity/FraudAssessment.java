@@ -149,8 +149,14 @@ public class FraudAssessment extends BaseEntity {
         return reviewedAt;
     }
 
-    public void setReviewedAt(Instant reviewedAt) {
-        this.reviewedAt = reviewedAt;
+    public void review(User reviewer, FraudReviewAction action, String note) {
+        this.reviewedBy = reviewer;
+        this.reviewAction = action;
+        this.reviewNote = note;
+        this.reviewedAt = Instant.now();
+        this.reviewStatus = action == FraudReviewAction.APPROVED
+                ? FraudReviewStatus.CLEARED
+                : FraudReviewStatus.REVIEWED;
     }
 
 }
