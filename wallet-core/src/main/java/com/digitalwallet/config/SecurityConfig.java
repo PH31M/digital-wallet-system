@@ -58,7 +58,13 @@ public class SecurityConfig {
                                 errorResponseWriter.write(request, response, ErrorCode.ACCESS_DENIED)))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/**", "/actuator/health", "/ws").permitAll()
+                        // /actuator/health: dùng cho Docker healthcheck / load balancer, không có JWT.
+                        // /actuator/prometheus: dùng cho Prometheus scraper, không thể gửi JWT.
+                        // Cả hai không lộ thông tin nhạy cảm ở mức "public" (show-details=when-authorized),
+                        // nên permit riêng; các endpoint actuator khác (metrics, info...) vẫn yêu cầu ADMIN.
+                        .requestMatchers("/api/auth/**", "/actuator/health", "/actuator/health/**",
+                                "/actuator/prometheus", "/ws").permitAll()
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
