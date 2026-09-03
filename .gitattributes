@@ -1,0 +1,20 @@
+# Keep repository text stable across Windows, macOS, and Linux checkouts.
+* text=auto eol=lf
+
+# Windows command entry points must retain CRLF for native execution.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Never attempt text normalization for binary assets.
+*.bmp -text
+*.gif -text
+*.ico -text
+*.jpeg -text
+*.jpg -text
+*.pdf -text
+*.png -text
+*.webp -text
+*.woff -text
+*.woff2 -text
+*.zip -text

@@ -16,11 +16,20 @@ public class AsyncConfig {
 
     @Bean(name = "asyncExecutor")
     public Executor asyncExecutor() {
+        return taskExecutor("wallet-async-");
+    }
+
+    @Bean(name = "emailTaskExecutor")
+    public Executor emailTaskExecutor() {
+        return taskExecutor("wallet-email-");
+    }
+
+    private Executor taskExecutor(String threadNamePrefix) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(4);
         executor.setMaxPoolSize(10);
         executor.setQueueCapacity(25);
-        executor.setThreadNamePrefix("wallet-async-");
+        executor.setThreadNamePrefix(threadNamePrefix);
         executor.initialize();
         return executor;
     }

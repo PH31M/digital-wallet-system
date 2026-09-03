@@ -107,23 +107,24 @@ create table ledger_entries (
 create table notifications (
     id uuid primary key,
     created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    public_id uuid not null,
     user_id uuid not null,
-    type varchar(30) not null,
-    title varchar(255) not null,
+    type varchar(40) not null,
+    title varchar(150) not null,
     message text not null,
-    transaction_id uuid,
+    metadata jsonb,
     is_read boolean not null default false,
+    read_at timestamptz,
+    constraint uq_notifications_public_id unique (public_id),
     constraint fk_notifications_user foreign key (user_id) references users(id),
-    constraint fk_notifications_transaction foreign key (transaction_id) references transactions(id),
     constraint chk_notifications_type check (type in (
-        'TRANSFER_SENT',
-        'TRANSFER_RECEIVED',
-        'DEPOSIT_SUCCESS',
-        'WITHDRAW_SUCCESS',
-        'TRANSFER_FAILED',
+        'TRANSACTION_SENT',
+        'TRANSACTION_RECEIVED',
+        'WITHDRAWAL_APPROVED',
+        'WITHDRAWAL_REJECTED',
         'FRAUD_ALERT',
-        'OTP_REQUIRED',
-        'ACCOUNT_LOCKED'
+        'SYSTEM_ANNOUNCEMENT'
     ))
 );
 
@@ -153,7 +154,7 @@ create index idx_ledger_entries_transaction_id on ledger_entries(transaction_id)
 create index idx_ledger_entries_wallet_id on ledger_entries(wallet_id);
 create index idx_notifications_user_id on notifications(user_id);
 create index idx_notifications_user_id_is_read on notifications(user_id, is_read);
-create index idx_notifications_transaction_id on notifications(transaction_id);
+create index idx_notifications_public_id on notifications(public_id);
 create index idx_audit_logs_actor_id on audit_logs(actor_id);
 create index idx_audit_logs_resource on audit_logs(resource_type, resource_id);
 create index idx_audit_logs_request_id on audit_logs(request_id);

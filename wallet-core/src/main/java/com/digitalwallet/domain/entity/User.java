@@ -2,6 +2,7 @@ package com.digitalwallet.domain.entity;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 import com.digitalwallet.domain.enums.UserRole;
 
@@ -9,6 +10,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 @Entity
@@ -17,6 +19,9 @@ public class User extends BaseAuditableEntity {
 
     private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
     private static final int LOCK_DURATION_MINUTES = 15;
+
+    @Column(name = "public_id", nullable = false, unique = true, updatable = false)
+    private UUID publicId = UUID.randomUUID();
 
     @Column(nullable = false, unique = true, length = 254)
     private String email;
@@ -54,6 +59,10 @@ public class User extends BaseAuditableEntity {
 
     @Column(name = "mfa_enabled", nullable = false)
     private Boolean mfaEnabled = false;
+
+    public UUID getPublicId() {
+        return publicId;
+    }
 
     public String getEmail() {
         return email;
@@ -101,6 +110,10 @@ public class User extends BaseAuditableEntity {
 
     public Boolean getMfaEnabled() {
         return mfaEnabled;
+    }
+
+    public void setPublicId(UUID publicId) {
+        this.publicId = publicId;
     }
 
     public void setEmail(String email) {
@@ -184,6 +197,13 @@ public class User extends BaseAuditableEntity {
 
     public void incrementTokenVersion() {
         this.tokenVersion = this.tokenVersion == null ? 1 : this.tokenVersion + 1;
+    }
+
+    @PrePersist
+    void ensurePublicId() {
+        if (publicId == null) {
+            publicId = UUID.randomUUID();
+        }
     }
 
     public boolean isCurrentlyLocked() {

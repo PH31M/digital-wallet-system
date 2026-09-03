@@ -35,6 +35,10 @@ public class JwtTokenProvider {
         return buildToken(user, refreshTokenExpiryMs, "refresh");
     }
 
+    public boolean validateToken(String token) {
+        return isValid(token);
+    }
+
     public boolean isValid(String token) {
         try {
             parseClaims(token);
@@ -42,6 +46,10 @@ public class JwtTokenProvider {
         } catch (JwtException | IllegalArgumentException ex) {
             return false;
         }
+    }
+
+    public Claims extractClaims(String token) {
+        return parseClaims(token);
     }
 
     public String getEmail(String token) {
@@ -83,6 +91,7 @@ public class JwtTokenProvider {
         var builder = Jwts.builder()
                 .subject(user.getEmail())
                 .claim("userId", user.getId().toString())
+                .claim("public_id", user.getPublicId().toString())
                 .claim("role", user.getRole().name())
                 .claim("tokenType", tokenType)
                 .issuedAt(Date.from(now))

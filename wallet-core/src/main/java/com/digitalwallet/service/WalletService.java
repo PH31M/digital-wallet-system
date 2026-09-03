@@ -19,6 +19,10 @@ import com.digitalwallet.domain.enums.NotificationType;
 import com.digitalwallet.domain.enums.TransactionStatus;
 import com.digitalwallet.domain.enums.TransactionType;
 import com.digitalwallet.domain.enums.WalletStatus;
+import com.digitalwallet.domain.event.BalanceUpdatedEvent;
+import com.digitalwallet.domain.event.FraudAlertEvent;
+import com.digitalwallet.domain.event.TransactionCompletedEvent;
+import com.digitalwallet.domain.event.TransactionFailedEvent;
 import com.digitalwallet.domain.repository.LedgerEntryRepository;
 import com.digitalwallet.domain.repository.TransactionRepository;
 import com.digitalwallet.domain.repository.WalletRepository;
@@ -27,7 +31,9 @@ import com.digitalwallet.exception.ErrorCode;
 import com.digitalwallet.exception.InsufficientBalanceException;
 import com.digitalwallet.exception.WalletFrozenException;
 import com.digitalwallet.util.ReferenceNumberGenerator;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -46,19 +52,19 @@ public class WalletService {
     private final FraudService fraudService;
     private final TransactionLimitService transactionLimitService;
     private final AuditService auditService;
-    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public WalletService(WalletRepository walletRepository, TransactionRepository transactionRepository,
             LedgerEntryRepository ledgerEntryRepository, FraudService fraudService,
             TransactionLimitService transactionLimitService, AuditService auditService,
-            NotificationService notificationService) {
+            ApplicationEventPublisher eventPublisher) {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
         this.fraudService = fraudService;
         this.transactionLimitService = transactionLimitService;
         this.auditService = auditService;
-        this.notificationService = notificationService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -90,7 +96,9 @@ public class WalletService {
 
         transaction.setStatus(TransactionStatus.PROCESSING);
         Transaction savedTransaction = transactionRepository.save(transaction);
-        enforceFraudDecision(savedTransaction, currentUser, metadata);
+        if (holdForReviewIfNecessary(savedTransaction, currentUser, metadata)) {
+            return TransactionResponse.from(savedTransaction);
+        }
 
         wallet.credit(request.getAmount());
         walletRepository.save(wallet);
@@ -101,7 +109,9 @@ public class WalletService {
         savedTransaction.complete();
         Transaction completed = transactionRepository.save(savedTransaction);
         audit(completed, currentUser, AuditAction.DEPOSIT_COMPLETED, metadata);
-        notificationService.transactionCompleted(currentUser, NotificationType.DEPOSIT_SUCCESS, completed);
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(wallet));
+        publishTransactionCompleted(completed,
+                TransactionCompletedEvent.Recipient.of(currentUser, NotificationType.TRANSACTION_RECEIVED));
         return TransactionResponse.from(completed);
     }
 
@@ -122,7 +132,9 @@ public class WalletService {
 
         transaction.setStatus(TransactionStatus.PROCESSING);
         Transaction savedTransaction = transactionRepository.save(transaction);
-        enforceFraudDecision(savedTransaction, currentUser, metadata);
+        if (holdForReviewIfNecessary(savedTransaction, currentUser, metadata)) {
+            return TransactionResponse.from(savedTransaction);
+        }
 
         wallet.debit(request.getAmount());
         walletRepository.save(wallet);
@@ -133,7 +145,9 @@ public class WalletService {
         savedTransaction.complete();
         Transaction completed = transactionRepository.save(savedTransaction);
         audit(completed, currentUser, AuditAction.WITHDRAW_COMPLETED, metadata);
-        notificationService.transactionCompleted(currentUser, NotificationType.WITHDRAW_SUCCESS, completed);
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(wallet));
+        publishTransactionCompleted(completed,
+                TransactionCompletedEvent.Recipient.of(currentUser, NotificationType.WITHDRAWAL_APPROVED));
         return TransactionResponse.from(completed);
     }
 
@@ -171,7 +185,9 @@ public class WalletService {
 
         transaction.setStatus(TransactionStatus.PROCESSING);
         Transaction savedTransaction = transactionRepository.save(transaction);
-        enforceFraudDecision(savedTransaction, currentUser, metadata);
+        if (holdForReviewIfNecessary(savedTransaction, currentUser, metadata)) {
+            return TransactionResponse.from(savedTransaction);
+        }
 
         lockedSender.debit(request.getAmount());
         lockedReceiver.credit(request.getAmount());
@@ -185,8 +201,11 @@ public class WalletService {
         savedTransaction.complete();
         Transaction completed = transactionRepository.save(savedTransaction);
         audit(completed, currentUser, AuditAction.TRANSFER_COMPLETED, metadata);
-        notificationService.transactionCompleted(currentUser, NotificationType.TRANSFER_SENT, completed);
-        notificationService.transactionCompleted(lockedReceiver.getUser(), NotificationType.TRANSFER_RECEIVED, completed);
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(lockedSender));
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(lockedReceiver));
+        publishTransactionCompleted(completed,
+                TransactionCompletedEvent.Recipient.of(currentUser, NotificationType.TRANSACTION_SENT),
+                TransactionCompletedEvent.Recipient.of(lockedReceiver.getUser(), NotificationType.TRANSACTION_RECEIVED));
         return TransactionResponse.from(completed);
     }
 
@@ -212,6 +231,106 @@ public class WalletService {
                 .toList();
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public TransactionResponse approvePendingReview(Transaction transaction, RequestMetadata metadata) {
+        if (!transaction.isPendingReview()) {
+            throw new BusinessException(ErrorCode.FRAUD_REVIEW_NOT_PENDING);
+        }
+
+        User initiator = initiatorFor(transaction);
+        transaction.setStatus(TransactionStatus.PROCESSING);
+        List<TransactionCompletedEvent.Recipient> recipients = executePendingTransaction(transaction, initiator);
+
+        transaction.complete();
+        Transaction completed = transactionRepository.save(transaction);
+        audit(completed, initiator, completionAction(completed), metadata);
+        publishTransactionCompleted(completed, recipients.toArray(TransactionCompletedEvent.Recipient[]::new));
+        return TransactionResponse.from(completed);
+    }
+
+    private List<TransactionCompletedEvent.Recipient> executePendingTransaction(Transaction transaction, User initiator) {
+        return switch (transaction.getTransactionType()) {
+            case DEPOSIT -> completePendingDeposit(transaction, initiator);
+            case WITHDRAW -> completePendingWithdrawal(transaction, initiator);
+            case TRANSFER -> completePendingTransfer(transaction, initiator);
+            default -> throw new BusinessException(ErrorCode.BUSINESS_RULE_VIOLATION,
+                    "Unsupported transaction type for fraud review");
+        };
+    }
+
+    private List<TransactionCompletedEvent.Recipient> completePendingDeposit(Transaction transaction, User initiator) {
+        Wallet wallet = lockWallet(transaction.getReceiverWallet().getId());
+        ensureActive(wallet);
+        transactionLimitService.assertWithinDailyLimit(wallet, transaction.getAmount());
+        wallet.credit(transaction.getAmount());
+        walletRepository.save(wallet);
+        ledgerEntryRepository.saveAll(List.of(
+                new LedgerEntry(transaction, null, LedgerAccountType.CASH_ACCOUNT, transaction.getAmount(), BigDecimal.ZERO),
+                new LedgerEntry(transaction, wallet, LedgerAccountType.USER_WALLET, BigDecimal.ZERO, transaction.getAmount())));
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(wallet));
+        return List.of(TransactionCompletedEvent.Recipient.of(initiator, NotificationType.TRANSACTION_RECEIVED));
+    }
+
+    private List<TransactionCompletedEvent.Recipient> completePendingWithdrawal(Transaction transaction, User initiator) {
+        Wallet wallet = lockWallet(transaction.getSenderWallet().getId());
+        ensureActive(wallet);
+        ensureSufficientBalance(wallet, transaction.getAmount());
+        transactionLimitService.assertWithinDailyLimit(wallet, transaction.getAmount());
+        wallet.debit(transaction.getAmount());
+        walletRepository.save(wallet);
+        ledgerEntryRepository.saveAll(List.of(
+                new LedgerEntry(transaction, wallet, LedgerAccountType.USER_WALLET, transaction.getAmount(), BigDecimal.ZERO),
+                new LedgerEntry(transaction, null, LedgerAccountType.CASH_ACCOUNT, BigDecimal.ZERO, transaction.getAmount())));
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(wallet));
+        return List.of(TransactionCompletedEvent.Recipient.of(initiator, NotificationType.WITHDRAWAL_APPROVED));
+    }
+
+    private List<TransactionCompletedEvent.Recipient> completePendingTransfer(Transaction transaction, User initiator) {
+        List<UUID> walletIds = List.of(transaction.getSenderWallet().getId(), transaction.getReceiverWallet().getId()).stream()
+                .sorted(Comparator.naturalOrder())
+                .toList();
+        Wallet firstLocked = lockWallet(walletIds.get(0));
+        Wallet secondLocked = lockWallet(walletIds.get(1));
+        Wallet sender = firstLocked.getId().equals(transaction.getSenderWallet().getId()) ? firstLocked : secondLocked;
+        Wallet receiver = firstLocked.getId().equals(transaction.getReceiverWallet().getId()) ? firstLocked : secondLocked;
+
+        ensureActive(sender);
+        ensureActive(receiver);
+        ensureSufficientBalance(sender, transaction.getAmount());
+        transactionLimitService.assertWithinDailyLimit(sender, transaction.getAmount());
+        transactionLimitService.assertWithinDailyLimit(receiver, transaction.getAmount());
+        sender.debit(transaction.getAmount());
+        receiver.credit(transaction.getAmount());
+        walletRepository.saveAll(List.of(sender, receiver));
+        ledgerEntryRepository.saveAll(List.of(
+                new LedgerEntry(transaction, sender, LedgerAccountType.USER_WALLET, transaction.getAmount(), BigDecimal.ZERO),
+                new LedgerEntry(transaction, receiver, LedgerAccountType.USER_WALLET, BigDecimal.ZERO, transaction.getAmount())));
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(sender));
+        eventPublisher.publishEvent(BalanceUpdatedEvent.of(receiver));
+        return List.of(
+                TransactionCompletedEvent.Recipient.of(initiator, NotificationType.TRANSACTION_SENT),
+                TransactionCompletedEvent.Recipient.of(receiver.getUser(), NotificationType.TRANSACTION_RECEIVED));
+    }
+
+    private User initiatorFor(Transaction transaction) {
+        Wallet wallet = transaction.getTransactionType() == TransactionType.DEPOSIT
+                ? transaction.getReceiverWallet()
+                : transaction.getSenderWallet();
+        if (wallet == null || wallet.getUser() == null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND);
+        }
+        return wallet.getUser();
+    }
+
+    private AuditAction completionAction(Transaction transaction) {
+        return switch (transaction.getTransactionType()) {
+            case DEPOSIT -> AuditAction.DEPOSIT_COMPLETED;
+            case WITHDRAW -> AuditAction.WITHDRAW_COMPLETED;
+            case TRANSFER -> AuditAction.TRANSFER_COMPLETED;
+            default -> AuditAction.TRANSACTION_FAILED;
+        };
+    }
+
     private Transaction newTransaction(TransactionType type, BigDecimal amount, String idempotencyKey) {
         Transaction transaction = new Transaction();
         transaction.setReferenceNumber(ReferenceNumberGenerator.generateReference());
@@ -231,27 +350,32 @@ public class WalletService {
             transaction.fail();
             Transaction failed = transactionRepository.save(transaction);
             audit(failed, currentUser, AuditAction.TRANSACTION_FAILED, metadata);
-            notificationService.transactionFailed(currentUser, failed, ex.getMessage());
+            eventPublisher.publishEvent(TransactionFailedEvent.of(currentUser, failed, ex.getMessage()));
             throw ex;
         }
     }
 
-    private void enforceFraudDecision(Transaction transaction, User currentUser, RequestMetadata metadata) {
+    private boolean holdForReviewIfNecessary(Transaction transaction, User currentUser, RequestMetadata metadata) {
         FraudDecision decision = assessFraud(transaction);
         if (decision == FraudDecision.CHALLENGE) {
-            audit(transaction, currentUser, AuditAction.FRAUD_CHALLENGE, metadata);
-            notificationService.fraudAlert(currentUser, transaction);
-            return;
+            transaction.awaitReview();
+            Transaction held = transactionRepository.save(transaction);
+            audit(held, currentUser, AuditAction.FRAUD_CHALLENGE, metadata);
+            eventPublisher.publishEvent(FraudAlertEvent.of(currentUser, held));
+            return true;
         }
 
         if (decision == FraudDecision.BLOCK) {
             transaction.fail();
             Transaction failed = transactionRepository.save(transaction);
             audit(failed, currentUser, AuditAction.FRAUD_BLOCKED, metadata);
-            notificationService.fraudAlert(currentUser, failed);
-            notificationService.transactionFailed(currentUser, failed, ErrorCode.FRAUD_BLOCKED.getDefaultMessage());
+            eventPublisher.publishEvent(FraudAlertEvent.of(currentUser, failed));
+            eventPublisher.publishEvent(TransactionFailedEvent.of(
+                    currentUser, failed, ErrorCode.FRAUD_BLOCKED.getDefaultMessage()));
             throw new BusinessException(ErrorCode.FRAUD_BLOCKED);
         }
+
+        return false;
     }
 
     private FraudDecision assessFraud(Transaction transaction) {
@@ -265,6 +389,10 @@ public class WalletService {
     private void audit(Transaction transaction, User currentUser, AuditAction action, RequestMetadata metadata) {
         auditService.log(currentUser, AuditActorType.USER, action,
                 "TRANSACTION", transaction.getId(), metadata.ipAddress(), metadata.userAgent(), metadata.requestId());
+    }
+
+    private void publishTransactionCompleted(Transaction transaction, TransactionCompletedEvent.Recipient... recipients) {
+        eventPublisher.publishEvent(new TransactionCompletedEvent(transaction, List.of(recipients)));
     }
 
     private Optional<TransactionResponse> existingTransaction(String idempotencyKey) {

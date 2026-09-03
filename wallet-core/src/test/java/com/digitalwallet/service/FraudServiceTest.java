@@ -3,6 +3,7 @@ package com.digitalwallet.service;
 import com.digitalwallet.domain.entity.FraudAssessment;
 import com.digitalwallet.domain.entity.Transaction;
 import com.digitalwallet.domain.enums.FraudDecision;
+import com.digitalwallet.domain.enums.FraudReviewStatus;
 import com.digitalwallet.domain.repository.FraudAssessmentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +47,7 @@ class FraudServiceTest {
         FraudAssessment assessment = fraudService.assess(transaction);
 
         assertThat(assessment.getDecision()).isEqualTo(FraudDecision.CHALLENGE);
+        assertThat(assessment.getReviewStatus()).isEqualTo(FraudReviewStatus.PENDING_REVIEW);
         assertThat(assessment.getTriggeredRulesJson()).contains("HIGH_VALUE_TRANSACTION");
         verify(fraudAssessmentRepository).save(any(FraudAssessment.class));
     }

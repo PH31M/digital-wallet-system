@@ -6,6 +6,7 @@ package com.digitalwallet.domain.enums;
 public enum TransactionStatus {
     PENDING,
     PROCESSING,
+    PENDING_REVIEW,
     COMPLETED,
     FAILED
 }

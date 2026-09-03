@@ -1,7 +1,9 @@
 package com.digitalwallet.domain.repository;
 
 import com.digitalwallet.domain.entity.Transaction;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -20,6 +22,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     List<Transaction> findBySenderWalletIdOrReceiverWalletId(UUID senderWalletId, UUID receiverWalletId);
 
     Optional<Transaction> findByIdempotencyKey(String idempotencyKey);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Transaction t WHERE t.id = :id")
+    Optional<Transaction> findByIdForUpdate(@Param("id") UUID id);
 
     @Query("""
             SELECT COALESCE(SUM(t.amount), 0)
