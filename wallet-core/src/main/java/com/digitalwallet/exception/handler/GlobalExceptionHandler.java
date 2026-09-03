@@ -5,6 +5,7 @@ import com.digitalwallet.common.response.ApiResponse;
 import com.digitalwallet.exception.BusinessException;
 import com.digitalwallet.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,20 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(errorCode.getHttpStatus()).body(
                 ApiResponse.error(errorCode.name(), message, field, request.getRequestURI(), requestId));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(
+            ConstraintViolationException ex, HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
+        String message = ex.getConstraintViolations().stream()
+                .findFirst()
+                .map(violation -> violation.getMessage())
+                .orElse(ErrorCode.VALIDATION_FAILED.getDefaultMessage());
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                ApiResponse.error(ErrorCode.VALIDATION_FAILED.name(), message, null,
+                        request.getRequestURI(), requestId));
     }
 
     @ExceptionHandler(BusinessException.class)

@@ -18,6 +18,8 @@ import java.util.UUID;
 public interface FraudAssessmentRepository extends JpaRepository<FraudAssessment, UUID> {
     Page<FraudAssessment> findByReviewStatus(FraudReviewStatus reviewStatus, Pageable pageable);
 
+    long countByReviewStatus(FraudReviewStatus reviewStatus);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT f FROM FraudAssessment f WHERE f.id = :id")
     Optional<FraudAssessment> findByIdForUpdate(@Param("id") UUID id);
