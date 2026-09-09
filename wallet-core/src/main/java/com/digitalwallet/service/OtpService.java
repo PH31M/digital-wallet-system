@@ -24,6 +24,7 @@ public class OtpService {
     private static final String REGISTER_PURPOSE = "register";
     private static final String PASSWORD_RESET_PURPOSE = "password-reset";
     private static final String MFA_PURPOSE = "mfa";
+    private static final String TRANSACTION_PURPOSE = "transaction";
 
     private static final DefaultRedisScript<Long> VERIFY_AND_DELETE_SCRIPT = new DefaultRedisScript<>(
             """
@@ -145,6 +146,26 @@ public class OtpService {
 
     public int incrementMfaAttempts(UUID userId) {
         return incrementAttempts(userId, MFA_PURPOSE);
+    }
+
+    public void saveTransactionOtp(UUID userId, String otp) {
+        saveOtp(userId, TRANSACTION_PURPOSE, otp);
+    }
+
+    public boolean verifyTransactionOtp(UUID userId, String otp) {
+        return verifyOtp(userId, TRANSACTION_PURPOSE, otp);
+    }
+
+    public boolean hasExceededTransactionOtpAttempts(UUID userId) {
+        return hasExceededMaxAttempts(userId, TRANSACTION_PURPOSE);
+    }
+
+    public int incrementTransactionOtpAttempts(UUID userId) {
+        return incrementAttempts(userId, TRANSACTION_PURPOSE);
+    }
+
+    public Duration getOtpTtl() {
+        return OTP_TTL;
     }
 
     private String buildOtpKey(UUID userId, String purpose) {

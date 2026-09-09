@@ -7,6 +7,7 @@ public enum TransactionStatus {
     PENDING,
     PROCESSING,
     PENDING_REVIEW,
+    PENDING_OTP_CONFIRMATION,
     COMPLETED,
     FAILED
 }

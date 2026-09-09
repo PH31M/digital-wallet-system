@@ -1,6 +1,7 @@
 package com.digitalwallet.domain.repository;
 
 import com.digitalwallet.domain.entity.Transaction;
+import com.digitalwallet.domain.enums.TransactionStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -22,6 +23,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     List<Transaction> findBySenderWalletIdOrReceiverWalletId(UUID senderWalletId, UUID receiverWalletId);
 
     Optional<Transaction> findByIdempotencyKey(String idempotencyKey);
+
+    List<Transaction> findByStatusAndCreatedAtBefore(TransactionStatus status, Instant cutoff);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Transaction t WHERE t.id = :id")

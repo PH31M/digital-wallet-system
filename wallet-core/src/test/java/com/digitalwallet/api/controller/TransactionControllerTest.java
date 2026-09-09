@@ -1,6 +1,7 @@
 package com.digitalwallet.api.controller;
 
 import com.digitalwallet.api.dto.response.TransactionHistoryItemResponse;
+import com.digitalwallet.api.dto.response.TransactionResponse;
 import com.digitalwallet.config.SecurityConfig;
 import com.digitalwallet.config.WebMvcConfig;
 import com.digitalwallet.domain.entity.User;
@@ -12,12 +13,14 @@ import com.digitalwallet.security.SecurityErrorResponseWriter;
 import com.digitalwallet.security.jwt.JwtTokenProvider;
 import com.digitalwallet.security.jwt.TokenBlacklistService;
 import com.digitalwallet.service.TransactionService;
+import com.digitalwallet.service.WalletService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,10 +32,12 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,6 +51,9 @@ class TransactionControllerTest {
 
     @MockBean
     private TransactionService transactionService;
+
+    @MockBean
+    private WalletService walletService;
 
     @MockBean
     private JwtTokenProvider jwtTokenProvider;
@@ -105,6 +113,47 @@ class TransactionControllerTest {
                 .andExpect(jsonPath("$.data.totalElements").value(1));
 
         verify(transactionService).getHistory(eq(user.getId()), any(), any());
+    }
+
+    @Test
+    void confirmOtp_asAuthenticatedUser_returns200AndCallsServiceWithCurrentUser() throws Exception {
+        User user = user("alice@example.com");
+        UUID transactionId = UUID.randomUUID();
+        TransactionResponse response = new TransactionResponse(transactionId, "TX-001", UUID.randomUUID(),
+                UUID.randomUUID(), "TRANSFER", new BigDecimal("6000000.00"), "COMPLETED",
+                Instant.now(), Instant.now(), null);
+        when(walletService.confirmOtp(eq(user), eq(transactionId), eq("123456"), any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/transactions/{transactionId}/confirm-otp", transactionId)
+                        .with(authentication(userAuthentication(user)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"otp\":\"123456\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
+
+        verify(walletService).confirmOtp(eq(user), eq(transactionId), eq("123456"), any());
+    }
+
+    @Test
+    void confirmOtp_blankOtp_returns400WithoutCallingService() throws Exception {
+        User user = user("alice@example.com");
+
+        mockMvc.perform(post("/api/v1/transactions/{transactionId}/confirm-otp", UUID.randomUUID())
+                        .with(authentication(userAuthentication(user)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"otp\":\"\"}"))
+                .andExpect(status().isBadRequest());
+
+        verify(walletService, never()).confirmOtp(any(), any(), any(), any());
+    }
+
+    @Test
+    void confirmOtp_withoutAuthentication_returns401() throws Exception {
+        mockMvc.perform(post("/api/v1/transactions/{transactionId}/confirm-otp", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"otp\":\"123456\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     private Authentication userAuthentication(User user) {
