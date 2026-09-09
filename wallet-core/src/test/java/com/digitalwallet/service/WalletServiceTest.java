@@ -255,6 +255,42 @@ class WalletServiceTest {
                 .isEqualTo(ErrorCode.VALIDATION_FAILED);
     }
 
+    @Test
+    void getWallet_belongsToDifferentUser_throwsAccessDenied() {
+        WalletService walletService = walletService();
+        User userB = user();
+        Wallet walletB = wallet(userB, new BigDecimal("50.00"));
+        User userA = user();
+
+        when(walletRepository.findById(walletB.getId())).thenReturn(Optional.of(walletB));
+
+        assertThatThrownBy(() -> walletService.getWallet(walletB.getId(), userA))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void getLedgerEntries_userNotParticipant_throwsAccessDenied() {
+        WalletService walletService = walletService();
+        User userB = user();
+        User userC = user();
+        Wallet walletB = wallet(userB, new BigDecimal("100.00"));
+        Wallet walletC = wallet(userC, new BigDecimal("5.00"));
+        Transaction transaction = new Transaction();
+        transaction.setId(UUID.randomUUID());
+        transaction.setSenderWallet(walletB);
+        transaction.setReceiverWallet(walletC);
+        User userA = user();
+
+        when(transactionRepository.findById(transaction.getId())).thenReturn(Optional.of(transaction));
+
+        assertThatThrownBy(() -> walletService.getLedgerEntries(transaction.getId(), userA))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
     private WalletService walletService() {
         return new WalletService(walletRepository, transactionRepository, ledgerEntryRepository,
                 fraudService, transactionLimitService, auditService, eventPublisher);
