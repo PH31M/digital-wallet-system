@@ -202,6 +202,18 @@ export function HomeScreen() {
                   amount={tx.amount}
                   direction={tx.direction === 'CREDIT' ? 'in' : 'out'}
                   status={mapTransactionStatusToBadge(tx.status)}
+                  onPress={() =>
+                    rootNavigation?.navigate('TransactionDetail', {
+                      title: tx.counterpartyName,
+                      subtitle: tx.description,
+                      icon: tx.icon,
+                      amount: tx.amount,
+                      direction: tx.direction === 'CREDIT' ? 'in' : 'out',
+                      status: mapTransactionStatusToBadge(tx.status),
+                      createdAt: tx.createdAt,
+                      transactionCode: tx.transactionCode,
+                    })
+                  }
                 />
               ))}
             </View>

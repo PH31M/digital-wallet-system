@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppHeader } from '../components/AppHeader';
 import { Card } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
@@ -13,7 +14,9 @@ import { colors } from '../theme/tokens';
 import { HistoryFilterCategory, MockHistoryItem, mockHistoryTransactions } from '../api/mock/historyMock';
 import { formatCurrency } from '../utils/formatCurrency';
 import { dateGroupKey, formatDateGroupLabel, formatTimeOfDay } from '../utils/formatRelativeTime';
+import { mapTransactionStatusToBadge } from '../utils/mapTransactionStatus';
 import { MainTabsParamList } from '../navigation/MainTabs';
+import { RootStackParamList } from '../navigation/RootNavigator';
 
 const FILTER_CHIPS: { key: HistoryFilterCategory; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
@@ -45,6 +48,7 @@ function groupByDate(items: MockHistoryItem[]) {
 
 export function HistoryScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabsParamList>>();
+  const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
   const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<HistoryFilterCategory>('all');
@@ -188,6 +192,18 @@ export function HistoryScreen() {
                       amount={item.amount}
                       direction={item.direction === 'CREDIT' ? 'in' : 'out'}
                       pendingApproval={item.status === 'PENDING_REVIEW'}
+                      onPress={() =>
+                        rootNavigation?.navigate('TransactionDetail', {
+                          title: item.title,
+                          subtitle: item.subtitle,
+                          icon: item.icon,
+                          amount: item.amount,
+                          direction: item.direction === 'CREDIT' ? 'in' : 'out',
+                          status: mapTransactionStatusToBadge(item.status),
+                          createdAt: item.createdAt,
+                          transactionCode: item.transactionCode,
+                        })
+                      }
                     />
                   </View>
                 ))}

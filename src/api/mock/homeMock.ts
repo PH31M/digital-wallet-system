@@ -26,6 +26,7 @@ export type MockTransactionItem = TransactionHistoryItemResponse & {
   /** Chỉ dùng cho mock/hiển thị — API thật không có field icon, Phase 2 cần tự suy ra icon theo type. */
   counterpartyName: string;
   icon: IconName;
+  transactionCode: string;
 };
 
 export const mockRecentTransactions: MockTransactionItem[] = [
@@ -42,6 +43,7 @@ export const mockRecentTransactions: MockTransactionItem[] = [
     createdAt: '2026-09-11T14:32:00+07:00',
     counterpartyName: 'Trần Thị Mai',
     icon: 'arrow_downward',
+    transactionCode: 'TXN-20260911-500241',
   },
   {
     id: 'tx-2',
@@ -56,6 +58,7 @@ export const mockRecentTransactions: MockTransactionItem[] = [
     createdAt: '2026-09-11T10:15:00+07:00',
     counterpartyName: 'Hóa đơn điện nước thoại',
     icon: 'receipt_long',
+    transactionCode: 'TXN-20260911-118837',
   },
   {
     id: 'tx-3',
@@ -70,6 +73,7 @@ export const mockRecentTransactions: MockTransactionItem[] = [
     createdAt: '2026-09-10T12:45:00+07:00',
     counterpartyName: 'Lê Hoàng Nam',
     icon: 'arrow_upward',
+    transactionCode: 'TXN-20260910-773310',
   },
   {
     id: 'tx-4',
@@ -84,5 +88,6 @@ export const mockRecentTransactions: MockTransactionItem[] = [
     createdAt: '2026-09-08T15:00:00+07:00',
     counterpartyName: 'Ngân hàng Vietcombank (*9012)',
     icon: 'account_balance',
+    transactionCode: 'TXN-20260908-990512',
   },
 ];

@@ -1,4 +1,6 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { IconName } from '../components/Icon';
+import { StatusBadgeStatus } from '../components/StatusBadge';
 import { ComponentShowcaseScreen } from '../screens/ComponentShowcaseScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
@@ -8,6 +10,7 @@ import { DepositScreen } from '../screens/DepositScreen';
 import { WithdrawScreen } from '../screens/WithdrawScreen';
 import { OtpConfirmScreen } from '../screens/OtpConfirmScreen';
 import { TransactionResultScreen } from '../screens/TransactionResultScreen';
+import { TransactionDetailScreen } from '../screens/TransactionDetailScreen';
 import { MainTabs } from './MainTabs';
 
 export type TransactionResultVariant = 'completed' | 'pending' | 'failed';
@@ -40,6 +43,22 @@ export type TransactionResultParams = {
   balanceAfter: number;
 };
 
+/**
+ * Tham số cho màn Chi tiết giao dịch — mở từ 1 dòng giao dịch có sẵn (Trang chủ/Lịch sử),
+ * nên tái dùng đúng dữ liệu mock của dòng đó (không tự bịa số tài khoản ngân hàng khi
+ * giao dịch là nội bộ ví, chỉ hiển thị counterparty/description đã có).
+ */
+export type TransactionDetailParams = {
+  title: string;
+  subtitle: string;
+  icon: IconName;
+  amount: number;
+  direction: 'in' | 'out';
+  status: StatusBadgeStatus;
+  createdAt: string;
+  transactionCode: string;
+};
+
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -51,6 +70,7 @@ export type RootStackParamList = {
   Withdraw: undefined;
   OtpConfirm: TransferDraft;
   TransactionResult: TransactionResultParams;
+  TransactionDetail: TransactionDetailParams;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -68,6 +88,7 @@ export function RootNavigator() {
       <Stack.Screen name="Withdraw" component={WithdrawScreen} />
       <Stack.Screen name="OtpConfirm" component={OtpConfirmScreen} />
       <Stack.Screen name="TransactionResult" component={TransactionResultScreen} />
+      <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
     </Stack.Navigator>
   );
 }

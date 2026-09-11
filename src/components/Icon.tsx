@@ -80,6 +80,11 @@ export const iconMap = {
   workspace_premium: 'medal-outline',
   speed: 'speedometer',
   logout: 'logout',
+  person_add: 'account-plus-outline',
+  replay: 'replay',
+  report_problem: 'alert-outline',
+  payments: 'cash-multiple',
+  print: 'printer-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;

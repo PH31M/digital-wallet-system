@@ -15,6 +15,7 @@ export type MockHistoryItem = TransactionHistoryItemResponse & {
   subtitle: string;
   icon: IconName;
   categories: Exclude<HistoryFilterCategory, 'all'>[];
+  transactionCode: string;
 };
 
 const today = new Date();
@@ -45,6 +46,7 @@ export const mockHistoryTransactions: MockHistoryItem[] = [
     subtitle: 'Chuyen tien thanh toan',
     icon: 'arrow_upward',
     categories: ['outflow', 'transfer'],
+    transactionCode: 'TXN-20260911-883921',
   },
   {
     id: 'h-2',
@@ -61,6 +63,7 @@ export const mockHistoryTransactions: MockHistoryItem[] = [
     subtitle: 'Vietcombank (*8839)',
     icon: 'arrow_downward',
     categories: ['inflow', 'topup'],
+    transactionCode: 'TXN-20260911-204558',
   },
   {
     id: 'h-3',
@@ -77,6 +80,7 @@ export const mockHistoryTransactions: MockHistoryItem[] = [
     subtitle: 'Mã KH: PE0200384',
     icon: 'bolt',
     categories: ['outflow'],
+    transactionCode: 'TXN-20260911-337201',
   },
   {
     id: 'h-4',
@@ -93,6 +97,7 @@ export const mockHistoryTransactions: MockHistoryItem[] = [
     subtitle: 'Thẻ ghi nợ (*4412)',
     icon: 'credit_card',
     categories: ['outflow', 'topup'],
+    transactionCode: 'TXN-20260910-654120',
   },
   {
     id: 'h-5',
@@ -109,6 +114,7 @@ export const mockHistoryTransactions: MockHistoryItem[] = [
     subtitle: 'Đơn hàng #8839218',
     icon: 'currency_exchange',
     categories: ['inflow'],
+    transactionCode: 'TXN-20260910-889321',
   },
   {
     id: 'h-6',
@@ -125,5 +131,6 @@ export const mockHistoryTransactions: MockHistoryItem[] = [
     subtitle: 'Đang xác minh bảo mật',
     icon: 'security_update_warning',
     categories: ['outflow', 'topup', 'pending'],
+    transactionCode: 'TXN-20260908-991205',
   },
 ];
