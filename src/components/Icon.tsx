@@ -35,6 +35,8 @@ export const iconMap = {
   chevron_right: 'chevron-right',
   close: 'close',
   warning_circle: 'alert-circle-outline',
+  account_balance_wallet: 'wallet-outline',
+  verified: 'check-decagram-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;
