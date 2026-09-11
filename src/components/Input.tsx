@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { Pressable, Text, TextInput, TextInputProps, View } from 'react-native';
 import { Icon, IconName } from './Icon';
 import { colors } from '../theme/tokens';
@@ -8,9 +8,11 @@ type InputProps = TextInputProps & {
   error?: string;
   helperText?: string;
   leadingIcon?: IconName;
+  /** Icon/nội dung phụ đặt trước nút hiện mật khẩu (vd. dấu tích khớp mật khẩu xác nhận). */
+  trailingAdornment?: ReactNode;
 };
 
-export function Input({ label, error, helperText, leadingIcon, secureTextEntry, ...rest }: InputProps) {
+export function Input({ label, error, helperText, leadingIcon, trailingAdornment, secureTextEntry, ...rest }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const isPasswordField = !!secureTextEntry;
@@ -40,8 +42,9 @@ export function Input({ label, error, helperText, leadingIcon, secureTextEntry, 
           placeholderTextColor={colors.onSurfaceVariant}
           className={`flex-1 font-body-lg text-body-lg text-on-surface ${leadingIcon ? 'ml-space-sm' : ''}`}
         />
+        {trailingAdornment}
         {isPasswordField && (
-          <Pressable onPress={() => setIsPasswordVisible((v) => !v)} hitSlop={8}>
+          <Pressable onPress={() => setIsPasswordVisible((v) => !v)} hitSlop={8} className="ml-space-xs">
             <Icon name={isPasswordVisible ? 'visibility_off' : 'visibility'} size={20} color={colors.onSurfaceVariant} />
           </Pressable>
         )}

@@ -63,6 +63,10 @@ export const iconMap = {
   shield_with_heart: 'shield-check-outline',
   alternate_email: 'email-outline',
   lock_open: 'lock-open-variant-outline',
+  person: 'account-outline',
+  mail: 'email-outline',
+  lock_reset: 'lock-reset',
+  info: 'information-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;

@@ -1,6 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ComponentShowcaseScreen } from '../screens/ComponentShowcaseScreen';
 import { LoginScreen } from '../screens/LoginScreen';
+import { RegisterScreen } from '../screens/RegisterScreen';
+import { RegisterOtpScreen } from '../screens/RegisterOtpScreen';
 import { TransferScreen } from '../screens/TransferScreen';
 import { OtpConfirmScreen } from '../screens/OtpConfirmScreen';
 import { TransactionResultScreen } from '../screens/TransactionResultScreen';
@@ -24,6 +26,8 @@ export type TransactionResultParams = TransferDraft & {
 
 export type RootStackParamList = {
   Login: undefined;
+  Register: undefined;
+  RegisterOtp: { phone: string };
   Main: undefined;
   ComponentShowcase: undefined;
   Transfer: undefined;
@@ -37,6 +41,8 @@ export function RootNavigator() {
   return (
     <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Register" component={RegisterScreen} />
+      <Stack.Screen name="RegisterOtp" component={RegisterOtpScreen} />
       <Stack.Screen name="Main" component={MainTabs} />
       <Stack.Screen name="ComponentShowcase" component={ComponentShowcaseScreen} />
       <Stack.Screen name="Transfer" component={TransferScreen} />

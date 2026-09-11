@@ -5,7 +5,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
-import { NumericKeypad } from '../components/NumericKeypad';
+import { OtpEntryPanel } from '../components/OtpEntryPanel';
 import { StackHeader } from '../components/StackHeader';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
@@ -33,15 +33,6 @@ export function OtpConfirmScreen() {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  function handleDigit(digit: string) {
-    if (otp.length >= OTP_LENGTH) return;
-    setOtp((prev) => prev + digit);
-  }
-
-  function handleBackspace() {
-    setOtp((prev) => prev.slice(0, -1));
-  }
-
   function handleResend() {
     if (secondsLeft > 0) return;
     setSecondsLeft(RESEND_SECONDS);
@@ -58,8 +49,6 @@ export function OtpConfirmScreen() {
       balanceAfter: mockWallet.balance - draft.amount,
     });
   }
-
-  const countdownLabel = `00:${secondsLeft.toString().padStart(2, '0')}`;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -144,78 +133,18 @@ export function OtpConfirmScreen() {
           </View>
         </View>
 
-        {/* OTP input */}
-        <View className="bg-surface-container-lowest rounded-lg p-space-md items-center">
-          <View className="w-14 h-14 rounded-full bg-surface-container-high items-center justify-center mb-3">
-            <Icon name="shield_lock" size={30} color={colors.primaryContainer} />
-          </View>
-          <Text className="font-headline-md text-headline-md text-primary font-bold text-center">
-            Nhập mã xác thực OTP
-          </Text>
-          <Text className="font-body-sm text-body-sm text-on-surface-variant mt-1 text-center" style={{ maxWidth: 280 }}>
-            Mã OTP 6 chữ số vừa được gửi đến số điện thoại{' '}
-            <Text className="font-semibold text-on-surface">+84 98***4321</Text> qua tin nhắn SMS
-          </Text>
-
-          <View className="flex-row items-center justify-center gap-2 mt-5 w-full">
-            {Array.from({ length: OTP_LENGTH }, (_, i) => {
-              const digit = otp[i];
-              const isActive = i === otp.length;
-              return (
-                <View
-                  key={i}
-                  className="w-11 h-14 rounded-md items-center justify-center"
-                  style={{
-                    backgroundColor: colors.surfaceContainerLow,
-                    borderWidth: isActive ? 2 : 0,
-                    borderColor: colors.primary,
-                  }}
-                >
-                  {digit ? (
-                    <Text className="font-numeric-balance-mobile text-numeric-balance-mobile text-primary font-bold">
-                      {digit}
-                    </Text>
-                  ) : (
-                    <View className="w-2 h-2 rounded-full bg-outline-variant" />
-                  )}
-                </View>
-              );
-            })}
-          </View>
-
-          <View className="mt-4 items-center gap-1.5">
-            <View className="flex-row items-center gap-1.5">
-              <Icon name="schedule" size={16} color={colors.onSurfaceVariant} />
-              <Text className="font-label-md text-label-md text-on-surface-variant">
-                Gửi lại mã sau:{' '}
-                <Text className="font-semibold text-primary font-numeric-ledger text-numeric-ledger">
-                  {countdownLabel}
-                </Text>
-              </Text>
-            </View>
-            <View className="flex-row items-center gap-3 pt-1">
-              <Text
-                onPress={() => showToast('Tính năng sắp ra mắt', 'info')}
-                className="font-label-sm text-label-sm text-primary font-semibold"
-              >
-                Gọi lấy mã thoại
-              </Text>
-              <View className="w-1 h-1 rounded-full bg-outline-variant" />
-              <Text
-                onPress={handleResend}
-                className="font-label-sm text-label-sm"
-                style={{ color: secondsLeft > 0 ? colors.outline : colors.primary }}
-              >
-                {secondsLeft > 0 ? 'Đổi số nhận OTP' : 'Gửi lại mã'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Numeric keypad */}
-        <View className="bg-surface-container-lowest rounded-lg p-3">
-          <NumericKeypad onDigitPress={handleDigit} onBackspace={handleBackspace} />
-        </View>
+        <OtpEntryPanel
+          value={otp}
+          onChange={setOtp}
+          secondsLeft={secondsLeft}
+          onResend={handleResend}
+          description={
+            <>
+              Mã OTP 6 chữ số vừa được gửi đến số điện thoại{' '}
+              <Text className="font-semibold text-on-surface">+84 98***4321</Text> qua tin nhắn SMS
+            </>
+          }
+        />
 
         <Button
           label="Xác nhận giao dịch"

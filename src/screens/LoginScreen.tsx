@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { AuthHeader } from '../components/AuthHeader';
 import { Button } from '../components/Button';
 import { Checkbox } from '../components/Checkbox';
 import { GoogleIcon } from '../components/GoogleIcon';
@@ -46,22 +47,10 @@ export function LoginScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <View className="h-16 px-gutter-mobile flex-row items-center justify-between bg-surface border-b border-surface-container-high">
-        <Pressable
-          onPress={() => navigation.canGoBack() && navigation.goBack()}
-          className="w-11 h-11 items-center justify-center -ml-2"
-          style={{ opacity: navigation.canGoBack() ? 1 : 0 }}
-        >
-          <Icon name="arrow_back" size={24} color={colors.onSurface} />
-        </Pressable>
-        <View className="flex-row items-center gap-space-xs">
-          <Logo size={28} />
-          <Text className="font-headline-sm text-headline-sm text-primary font-bold">PMPay</Text>
-        </View>
-        <Pressable onPress={comingSoon} className="w-11 h-11 items-center justify-center -mr-2">
-          <Icon name="help_outline" size={22} color={colors.onSurfaceVariant} />
-        </Pressable>
-      </View>
+      <AuthHeader
+        onBack={navigation.canGoBack() ? () => navigation.goBack() : undefined}
+        onHelpPress={comingSoon}
+      />
 
       <ScrollView className="flex-1 px-margin-mobile" contentContainerStyle={{ paddingVertical: 16 }}>
         <View className="items-center gap-space-md mb-space-lg">
@@ -155,7 +144,7 @@ export function LoginScreen() {
 
         <View className="mt-space-lg flex-row items-center justify-center flex-wrap">
           <Text className="font-body-md text-body-md text-on-surface-variant">Chưa có tài khoản? </Text>
-          <Pressable onPress={comingSoon}>
+          <Pressable onPress={() => navigation.navigate('Register')}>
             <Text className="font-headline-sm text-headline-sm text-primary" style={{ textDecorationLine: 'underline' }}>
               Đăng ký ngay
             </Text>
