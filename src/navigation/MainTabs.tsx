@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { Icon, IconName } from '../components/Icon';
 import { colors } from '../theme/tokens';
 import { HomeScreen } from '../screens/HomeScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 
 export type MainTabsParamList = {
@@ -14,16 +15,6 @@ export type MainTabsParamList = {
 };
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
-
-function LichSuScreen() {
-  return (
-    <PlaceholderScreen
-      title="Lịch Sử"
-      icon="history"
-      description="Toàn bộ lịch sử giao dịch của bạn sẽ hiện ở đây."
-    />
-  );
-}
 
 function ThongBaoScreen() {
   return (
@@ -86,7 +77,7 @@ export function MainTabs() {
       />
       <Tab.Screen
         name="LichSu"
-        component={LichSuScreen}
+        component={HistoryScreen}
         options={{
           title: 'Lịch sử',
           tabBarIcon: ({ color }) => <TabIcon name="history" color={color} />,

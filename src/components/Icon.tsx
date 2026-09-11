@@ -37,6 +37,13 @@ export const iconMap = {
   warning_circle: 'alert-circle-outline',
   account_balance_wallet: 'wallet-outline',
   verified: 'check-decagram-outline',
+  bolt: 'lightning-bolt-outline',
+  credit_card: 'credit-card-outline',
+  currency_exchange: 'cash-refund',
+  security_update_warning: 'shield-alert-outline',
+  filter_list: 'tune-variant',
+  search: 'magnify',
+  download: 'tray-arrow-down',
 } as const;
 
 export type IconName = keyof typeof iconMap;
