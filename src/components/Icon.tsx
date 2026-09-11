@@ -44,6 +44,23 @@ export const iconMap = {
   filter_list: 'tune-variant',
   search: 'magnify',
   download: 'tray-arrow-down',
+  arrow_back: 'arrow-left',
+  contacts: 'account-multiple-outline',
+  arrow_forward: 'arrow-right',
+  electric_bolt: 'lightning-bolt',
+  check: 'check',
+  shield: 'shield-outline',
+  help_outline: 'help-circle-outline',
+  phone_in_talk: 'phone-in-talk',
+  fingerprint: 'fingerprint',
+  backspace: 'backspace-outline',
+  error: 'alert-octagon-outline',
+  home: 'home-outline',
+  share: 'share-variant-outline',
+  refresh: 'refresh',
+  timeline: 'chart-timeline-variant',
+  hourglass_top: 'timer-sand',
+  shield_with_heart: 'shield-check-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;

@@ -5,6 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppHeader } from '../components/AppHeader';
 import { Card } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
@@ -17,6 +18,7 @@ import { formatRelativeTime } from '../utils/formatRelativeTime';
 import { maskWalletId } from '../utils/formatWalletId';
 import { mapTransactionStatusToBadge } from '../utils/mapTransactionStatus';
 import { MainTabsParamList } from '../navigation/MainTabs';
+import { RootStackParamList } from '../navigation/RootNavigator';
 
 type QuickAction = {
   label: string;
@@ -40,8 +42,12 @@ export function HomeScreen() {
     showToast('Tính năng sắp ra mắt', 'info');
   }
 
+  function goToTransfer() {
+    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('Transfer');
+  }
+
   const quickActions: QuickAction[] = [
-    { label: 'Chuyển tiền', icon: 'sync_alt', onPress: comingSoon },
+    { label: 'Chuyển tiền', icon: 'sync_alt', onPress: goToTransfer },
     { label: 'Nạp tiền', icon: 'add_circle', onPress: comingSoon },
     { label: 'Rút tiền', icon: 'arrow_circle_down', onPress: comingSoon },
     { label: 'Lịch sử', icon: 'history', onPress: () => navigation.navigate('LichSu') },
