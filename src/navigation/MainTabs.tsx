@@ -4,7 +4,7 @@ import { Icon, IconName } from '../components/Icon';
 import { colors } from '../theme/tokens';
 import { HomeScreen } from '../screens/HomeScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
-import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 
 export type MainTabsParamList = {
@@ -15,16 +15,6 @@ export type MainTabsParamList = {
 };
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
-
-function ThongBaoScreen() {
-  return (
-    <PlaceholderScreen
-      title="Thông báo"
-      icon="notifications"
-      description="Thông báo giao dịch và bảo mật sẽ hiện ở đây."
-    />
-  );
-}
 
 function TabIcon({ name, color, showDot = false }: { name: IconName; color: string; showDot?: boolean }) {
   return (
@@ -66,7 +56,7 @@ export function MainTabs() {
       />
       <Tab.Screen
         name="ThongBao"
-        component={ThongBaoScreen}
+        component={NotificationsScreen}
         options={{
           title: 'Thông báo',
           tabBarIcon: ({ color }) => <TabIcon name="notifications" color={color} showDot />,

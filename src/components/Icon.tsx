@@ -85,6 +85,10 @@ export const iconMap = {
   report_problem: 'alert-outline',
   payments: 'cash-multiple',
   print: 'printer-outline',
+  arrow_circle_up: 'arrow-up-circle-outline',
+  done_all: 'check-all',
+  campaign: 'bullhorn-outline',
+  notifications_paused: 'bell-off-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;
