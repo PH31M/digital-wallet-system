@@ -61,6 +61,8 @@ export const iconMap = {
   timeline: 'chart-timeline-variant',
   hourglass_top: 'timer-sand',
   shield_with_heart: 'shield-check-outline',
+  alternate_email: 'email-outline',
+  lock_open: 'lock-open-variant-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;

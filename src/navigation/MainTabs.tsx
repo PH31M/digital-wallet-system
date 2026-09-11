@@ -1,5 +1,5 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { Pressable, Text, View } from 'react-native';
 import { Icon, IconName } from '../components/Icon';
 import { colors } from '../theme/tokens';
@@ -29,17 +29,26 @@ function ThongBaoScreen() {
 function HoSoScreen() {
   const navigation = useNavigation();
 
+  function handleLogout() {
+    navigation.getParent()?.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Login' as never }] }));
+  }
+
   return (
     <PlaceholderScreen
       title="Hồ sơ"
       icon="account_circle"
       description="Thông tin tài khoản và cài đặt sẽ hiện ở đây."
       footer={
-        <Pressable onPress={() => navigation.getParent()?.navigate('ComponentShowcase' as never)}>
-          <Text className="font-label-md text-label-md text-primary text-center">
-            → Component Showcase (dev)
-          </Text>
-        </Pressable>
+        <View className="gap-space-md">
+          <Pressable onPress={handleLogout}>
+            <Text className="font-label-md text-label-md text-danger text-center font-semibold">Đăng xuất</Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.getParent()?.navigate('ComponentShowcase' as never)}>
+            <Text className="font-label-md text-label-md text-primary text-center">
+              → Component Showcase (dev)
+            </Text>
+          </Pressable>
+        </View>
       }
     />
   );

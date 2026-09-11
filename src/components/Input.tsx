@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { Pressable, Text, TextInput, TextInputProps, View } from 'react-native';
-import { Icon } from './Icon';
+import { Icon, IconName } from './Icon';
 import { colors } from '../theme/tokens';
 
 type InputProps = TextInputProps & {
   label: string;
   error?: string;
   helperText?: string;
+  leadingIcon?: IconName;
 };
 
-export function Input({ label, error, helperText, secureTextEntry, ...rest }: InputProps) {
+export function Input({ label, error, helperText, leadingIcon, secureTextEntry, ...rest }: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const isPasswordField = !!secureTextEntry;
@@ -24,6 +25,7 @@ export function Input({ label, error, helperText, secureTextEntry, ...rest }: In
         className="h-12 rounded-md bg-surface-container-lowest flex-row items-center px-space-md"
         style={{ borderColor, borderWidth }}
       >
+        {leadingIcon && <Icon name={leadingIcon} size={20} color={colors.outline} />}
         <TextInput
           {...rest}
           secureTextEntry={isPasswordField && !isPasswordVisible}
@@ -36,7 +38,7 @@ export function Input({ label, error, helperText, secureTextEntry, ...rest }: In
             rest.onBlur?.(e);
           }}
           placeholderTextColor={colors.onSurfaceVariant}
-          className="flex-1 font-body-lg text-body-lg text-on-surface"
+          className={`flex-1 font-body-lg text-body-lg text-on-surface ${leadingIcon ? 'ml-space-sm' : ''}`}
         />
         {isPasswordField && (
           <Pressable onPress={() => setIsPasswordVisible((v) => !v)} hitSlop={8}>
