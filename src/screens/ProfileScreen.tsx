@@ -150,7 +150,12 @@ export function ProfileScreen() {
         <View className="gap-space-xs">
           <SectionTitle>Cài đặt tài khoản & thông tin</SectionTitle>
           <View className="bg-surface-container-lowest rounded-lg overflow-hidden">
-            <SettingsMenuRow icon="manage_accounts" title="Chỉnh sửa hồ sơ" subtitle="Cập nhật tên hiển thị, SĐT liên hệ" onPress={comingSoon} />
+            <SettingsMenuRow
+              icon="manage_accounts"
+              title="Chỉnh sửa hồ sơ"
+              subtitle="Cập nhật tên hiển thị, SĐT liên hệ"
+              onPress={() => rootNavigation?.navigate('EditProfile')}
+            />
             <View className="h-px bg-surface-container-high mx-space-md" />
             <SettingsMenuRow
               icon="credit_card"

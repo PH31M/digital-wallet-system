@@ -10,9 +10,21 @@ type InputProps = TextInputProps & {
   leadingIcon?: IconName;
   /** Icon/nội dung phụ đặt trước nút hiện mật khẩu (vd. dấu tích khớp mật khẩu xác nhận). */
   trailingAdornment?: ReactNode;
+  /** Nội dung phụ canh phải cùng hàng với label (vd. badge "Khớp CCCD", link "Xác thực qua OTP"). */
+  labelRight?: ReactNode;
 };
 
-export function Input({ label, error, helperText, leadingIcon, trailingAdornment, secureTextEntry, ...rest }: InputProps) {
+export function Input({
+  label,
+  error,
+  helperText,
+  leadingIcon,
+  trailingAdornment,
+  labelRight,
+  secureTextEntry,
+  editable = true,
+  ...rest
+}: InputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const isPasswordField = !!secureTextEntry;
@@ -22,9 +34,14 @@ export function Input({ label, error, helperText, leadingIcon, trailingAdornment
 
   return (
     <View>
-      <Text className="font-label-md text-label-md text-on-surface-variant mb-space-xs">{label}</Text>
+      <View className="flex-row items-center justify-between mb-space-xs">
+        <Text className="font-label-md text-label-md text-on-surface-variant">{label}</Text>
+        {labelRight}
+      </View>
       <View
-        className="h-12 rounded-md bg-surface-container-lowest flex-row items-center px-space-md"
+        className={`h-12 rounded-md flex-row items-center px-space-md ${
+          editable ? 'bg-surface-container-lowest' : 'bg-surface-container-low'
+        }`}
         style={{ borderColor, borderWidth }}
       >
         {leadingIcon && <Icon name={leadingIcon} size={20} color={colors.outline} />}

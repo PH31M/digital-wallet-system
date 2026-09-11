@@ -89,6 +89,10 @@ export const iconMap = {
   done_all: 'check-all',
   campaign: 'bullhorn-outline',
   notifications_paused: 'bell-off-outline',
+  badge: 'card-account-details-outline',
+  photo_camera: 'camera',
+  cell_tower: 'antenna',
+  chevron_left: 'chevron-left',
 } as const;
 
 export type IconName = keyof typeof iconMap;
