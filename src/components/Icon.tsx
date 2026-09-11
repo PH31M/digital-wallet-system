@@ -72,6 +72,14 @@ export const iconMap = {
   swap_horiz: 'swap-horizontal',
   add_card: 'credit-card-plus-outline',
   security: 'security',
+  manage_accounts: 'account-cog-outline',
+  phonelink_setup: 'cellphone-cog',
+  notifications_active: 'bell-ring-outline',
+  support_agent: 'headset',
+  gavel: 'gavel',
+  workspace_premium: 'medal-outline',
+  speed: 'speedometer',
+  logout: 'logout',
 } as const;
 
 export type IconName = keyof typeof iconMap;

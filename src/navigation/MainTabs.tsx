@@ -1,11 +1,11 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { CommonActions, useNavigation } from '@react-navigation/native';
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { Icon, IconName } from '../components/Icon';
 import { colors } from '../theme/tokens';
 import { HomeScreen } from '../screens/HomeScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
 
 export type MainTabsParamList = {
   TrangChu: undefined;
@@ -22,34 +22,6 @@ function ThongBaoScreen() {
       title="Thông báo"
       icon="notifications"
       description="Thông báo giao dịch và bảo mật sẽ hiện ở đây."
-    />
-  );
-}
-
-function HoSoScreen() {
-  const navigation = useNavigation();
-
-  function handleLogout() {
-    navigation.getParent()?.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Login' as never }] }));
-  }
-
-  return (
-    <PlaceholderScreen
-      title="Hồ sơ"
-      icon="account_circle"
-      description="Thông tin tài khoản và cài đặt sẽ hiện ở đây."
-      footer={
-        <View className="gap-space-md">
-          <Pressable onPress={handleLogout}>
-            <Text className="font-label-md text-label-md text-danger text-center font-semibold">Đăng xuất</Text>
-          </Pressable>
-          <Pressable onPress={() => navigation.getParent()?.navigate('ComponentShowcase' as never)}>
-            <Text className="font-label-md text-label-md text-primary text-center">
-              → Component Showcase (dev)
-            </Text>
-          </Pressable>
-        </View>
-      }
     />
   );
 }
@@ -102,7 +74,7 @@ export function MainTabs() {
       />
       <Tab.Screen
         name="HoSo"
-        component={HoSoScreen}
+        component={ProfileScreen}
         options={{
           title: 'Hồ sơ',
           tabBarIcon: ({ color }) => <TabIcon name="account_circle" color={color} />,
