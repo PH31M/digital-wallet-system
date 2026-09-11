@@ -8,17 +8,15 @@ import { Icon, IconName } from '../components/Icon';
 import { StackHeader } from '../components/StackHeader';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
-import { RootStackParamList, TransactionResultVariant } from '../navigation/RootNavigator';
+import { RootStackParamList, TransactionKind, TransactionResultVariant } from '../navigation/RootNavigator';
 
 type VariantConfig = {
   headerTitle: string;
-  heroTitle: string;
   heroIcon: IconName;
   heroIconColor: string;
   heroIconBg: string;
   heroHaloBg: string;
   amountColor: string;
-  amountPrefix: string;
   statusLabel: string;
   statusBg: string;
   statusTextColor: string;
@@ -27,44 +25,56 @@ type VariantConfig = {
 const VARIANT_CONFIG: Record<TransactionResultVariant, VariantConfig> = {
   completed: {
     headerTitle: 'Chi Tiết Giao Dịch',
-    heroTitle: 'Chuyển tiền thành công',
     heroIcon: 'check_circle',
     heroIconColor: colors.onSecondary,
     heroIconBg: colors.secondary,
     heroHaloBg: 'rgba(126,246,190,0.3)',
     amountColor: colors.onSurface,
-    amountPrefix: '-',
     statusLabel: 'Thành công',
     statusBg: 'rgba(126,246,190,0.4)',
     statusTextColor: colors.secondary,
   },
   pending: {
     headerTitle: 'Kết Quả Giao Dịch',
-    heroTitle: 'Giao dịch đang chờ duyệt',
     heroIcon: 'hourglass_top',
     heroIconColor: '#ffffff',
     heroIconBg: '#F59E0B',
     heroHaloBg: 'rgba(245,158,11,0.15)',
     amountColor: colors.primary,
-    amountPrefix: '',
     statusLabel: 'Chờ xét duyệt',
     statusBg: '#FEF3C7',
     statusTextColor: '#92400E',
   },
   failed: {
     headerTitle: 'Kết Quả Giao Dịch',
-    heroTitle: 'Giao dịch thất bại',
     heroIcon: 'cancel',
     heroIconColor: colors.onError,
     heroIconBg: colors.error,
     heroHaloBg: '#FEE2E2',
     amountColor: colors.error,
-    amountPrefix: '',
     statusLabel: 'Thất bại',
     statusBg: colors.errorContainer,
     statusTextColor: colors.error,
   },
 };
+
+const KIND_VERB: Record<TransactionKind, string> = {
+  transfer: 'Chuyển tiền',
+  deposit: 'Nạp tiền',
+  withdraw: 'Rút tiền',
+};
+
+function getHeroTitle(kind: TransactionKind, variant: TransactionResultVariant): string {
+  if (variant === 'completed') return `${KIND_VERB[kind]} thành công`;
+  if (variant === 'failed') return 'Giao dịch thất bại';
+  return 'Giao dịch đang chờ duyệt';
+}
+
+/** Nạp tiền là tiền vào ví (+), chuyển/rút tiền là tiền ra khỏi ví (-); pending/failed không hiện dấu. */
+function getAmountPrefix(kind: TransactionKind, variant: TransactionResultVariant): string {
+  if (variant !== 'completed') return '';
+  return kind === 'deposit' ? '+' : '-';
+}
 
 function formatTimestamp(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -79,6 +89,8 @@ export function TransactionResultScreen() {
   const { showToast } = useToast();
   const params = route.params;
   const config = VARIANT_CONFIG[params.variant];
+  const heroTitle = getHeroTitle(params.kind, params.variant);
+  const amountPrefix = getAmountPrefix(params.kind, params.variant);
   const [timestamp] = useState(() => formatTimestamp(new Date()));
   const [copied, setCopied] = useState(false);
 
@@ -97,7 +109,7 @@ export function TransactionResultScreen() {
     );
   }
 
-  const recipientInitial = params.recipientName.trim().charAt(0).toUpperCase();
+  const counterpartyInitial = params.counterpartyName.trim().charAt(0).toUpperCase();
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -117,14 +129,14 @@ export function TransactionResultScreen() {
             className="font-headline-md text-headline-md font-bold text-center"
             style={{ color: params.variant === 'failed' ? colors.error : colors.primary }}
           >
-            {config.heroTitle}
+            {heroTitle}
           </Text>
           <View className="flex-row items-baseline mt-space-xs">
             <Text
               className="font-numeric-balance-mobile text-numeric-balance-mobile font-bold"
               style={{ color: config.amountColor }}
             >
-              {config.amountPrefix}
+              {amountPrefix}
               {params.amount.toLocaleString('vi-VN')} đ
             </Text>
           </View>
@@ -181,29 +193,29 @@ export function TransactionResultScreen() {
 
           <View className="gap-space-sm">
             <View className="flex-row items-center justify-between py-1">
-              <Text className="font-body-md text-body-md text-on-surface-variant">Người nhận</Text>
+              <Text className="font-body-md text-body-md text-on-surface-variant">{params.counterpartyLabel}</Text>
               <View className="flex-row items-center gap-space-xs">
                 <View className="w-5 h-5 rounded-full bg-primary-fixed items-center justify-center">
                   <Text style={{ fontSize: 10 }} className="text-on-primary-fixed font-bold">
-                    {recipientInitial}
+                    {counterpartyInitial}
                   </Text>
                 </View>
                 <Text className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                  {params.recipientName}
+                  {params.counterpartyName}
                 </Text>
               </View>
             </View>
             <View className="flex-row items-center justify-between py-1">
-              <Text className="font-body-md text-body-md text-on-surface-variant">Ví nhận</Text>
-              <Text className="font-body-md text-body-md text-on-surface font-medium">
-                {params.recipientWalletCode} ({params.recipientWalletLabel})
+              <Text className="font-body-md text-body-md text-on-surface-variant">
+                {params.kind === 'transfer' ? 'Ví nhận' : 'Chi tiết'}
               </Text>
+              <Text className="font-body-md text-body-md text-on-surface font-medium">{params.counterpartyDetail}</Text>
             </View>
             <View className="flex-row items-center justify-between py-1">
-              <Text className="font-body-md text-body-md text-on-surface-variant">Nguồn tiền</Text>
+              <Text className="font-body-md text-body-md text-on-surface-variant">{params.sourceLabel}</Text>
               <View className="flex-row items-center gap-1.5">
                 <Icon name="account_balance_wallet" size={16} color={colors.primary} />
-                <Text className="font-body-md text-body-md text-on-surface font-medium">Ví chính (•••• 8829)</Text>
+                <Text className="font-body-md text-body-md text-on-surface font-medium">{params.sourceDetail}</Text>
               </View>
             </View>
             {!!params.note && (

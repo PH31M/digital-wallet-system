@@ -10,7 +10,7 @@ import { StackHeader } from '../components/StackHeader';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
 import { formatCurrency } from '../utils/formatCurrency';
-import { generateTransactionCode } from '../utils/transferHelpers';
+import { buildTransferResultParams } from '../utils/transferHelpers';
 import { mockWallet } from '../api/mock/homeMock';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -42,12 +42,10 @@ export function OtpConfirmScreen() {
 
   function handleConfirm() {
     // Demo: mọi mã 6 số đều được coi là hợp lệ (chưa nối API xác thực OTP thật).
-    navigation.navigate('TransactionResult', {
-      ...draft,
-      variant: 'completed',
-      transactionCode: generateTransactionCode(),
-      balanceAfter: mockWallet.balance - draft.amount,
-    });
+    navigation.navigate(
+      'TransactionResult',
+      buildTransferResultParams(draft, 'completed', mockWallet.balance - draft.amount),
+    );
   }
 
   return (

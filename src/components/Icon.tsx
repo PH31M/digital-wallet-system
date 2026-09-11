@@ -67,6 +67,11 @@ export const iconMap = {
   mail: 'email-outline',
   lock_reset: 'lock-reset',
   info: 'information-outline',
+  qr_code_2: 'qrcode',
+  edit: 'pencil-outline',
+  swap_horiz: 'swap-horizontal',
+  add_card: 'credit-card-plus-outline',
+  security: 'security',
 } as const;
 
 export type IconName = keyof typeof iconMap;

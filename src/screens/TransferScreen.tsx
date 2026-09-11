@@ -9,7 +9,7 @@ import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
 import { mockWallet } from '../api/mock/homeMock';
 import { mockRecipient } from '../api/mock/transferMock';
-import { generateTransactionCode, getAmountInWords } from '../utils/transferHelpers';
+import { buildTransferResultParams, getAmountInWords } from '../utils/transferHelpers';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 const OTP_REQUIRED_AMOUNT = 5_000_000; // khớp wallet.otp.required-amount (mặc định) bên backend
@@ -75,12 +75,10 @@ export function TransferScreen() {
         if (amount >= OTP_REQUIRED_AMOUNT) {
           navigation.navigate('OtpConfirm', draft);
         } else {
-          navigation.navigate('TransactionResult', {
-            ...draft,
-            variant: 'completed',
-            transactionCode: generateTransactionCode(),
-            balanceAfter: mockWallet.balance - amount,
-          });
+          navigation.navigate(
+            'TransactionResult',
+            buildTransferResultParams(draft, 'completed', mockWallet.balance - amount),
+          );
         }
       }, 600);
     }, 600);

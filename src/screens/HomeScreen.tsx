@@ -42,14 +42,12 @@ export function HomeScreen() {
     showToast('Tính năng sắp ra mắt', 'info');
   }
 
-  function goToTransfer() {
-    navigation.getParent<NativeStackNavigationProp<RootStackParamList>>()?.navigate('Transfer');
-  }
+  const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
 
   const quickActions: QuickAction[] = [
-    { label: 'Chuyển tiền', icon: 'sync_alt', onPress: goToTransfer },
-    { label: 'Nạp tiền', icon: 'add_circle', onPress: comingSoon },
-    { label: 'Rút tiền', icon: 'arrow_circle_down', onPress: comingSoon },
+    { label: 'Chuyển tiền', icon: 'sync_alt', onPress: () => rootNavigation?.navigate('Transfer') },
+    { label: 'Nạp tiền', icon: 'add_circle', onPress: () => rootNavigation?.navigate('Deposit') },
+    { label: 'Rút tiền', icon: 'arrow_circle_down', onPress: () => rootNavigation?.navigate('Withdraw') },
     { label: 'Lịch sử', icon: 'history', onPress: () => navigation.navigate('LichSu') },
   ];
 
