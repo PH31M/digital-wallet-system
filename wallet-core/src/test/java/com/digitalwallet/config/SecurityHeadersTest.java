@@ -46,7 +46,10 @@ import static org.mockito.Mockito.when;
                 "jwt.secret=unit-test-secret-key-must-be-at-least-32-chars-long",
                 "jwt.expiration-ms=3600000",
                 "jwt.refresh-expiration-ms=604800000",
-                "app.cors.allowed-origins=http://localhost:3000"
+                "app.cors.allowed-origins=http://localhost:3000",
+                "management.health.redis.enabled=false",
+                "management.health.db.enabled=false",
+                "management.health.mail.enabled=false"
         })
 class SecurityHeadersTest {
 
