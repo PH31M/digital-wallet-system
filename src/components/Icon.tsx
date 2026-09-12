@@ -97,6 +97,13 @@ export const iconMap = {
   phone_iphone: 'cellphone',
   keyboard_backspace: 'arrow-left',
   enhanced_encryption: 'shield-key-outline',
+  stay_current_portrait: 'cellphone',
+  location_on: 'map-marker-outline',
+  pin_drop: 'map-marker-outline',
+  laptop_mac: 'laptop',
+  tablet_mac: 'tablet',
+  desktop_windows: 'monitor',
+  delete: 'trash-can-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;

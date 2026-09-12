@@ -13,6 +13,7 @@ import { OtpConfirmScreen } from '../screens/OtpConfirmScreen';
 import { TransactionResultScreen } from '../screens/TransactionResultScreen';
 import { TransactionDetailScreen } from '../screens/TransactionDetailScreen';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
+import { ActiveSessionsScreen } from '../screens/ActiveSessionsScreen';
 import { MainTabs } from './MainTabs';
 
 export type TransactionResultVariant = 'completed' | 'pending' | 'failed';
@@ -75,6 +76,7 @@ export type RootStackParamList = {
   TransactionResult: TransactionResultParams;
   TransactionDetail: TransactionDetailParams;
   EditProfile: undefined;
+  ActiveSessions: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -95,6 +97,7 @@ export function RootNavigator() {
       <Stack.Screen name="TransactionResult" component={TransactionResultScreen} />
       <Stack.Screen name="TransactionDetail" component={TransactionDetailScreen} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      <Stack.Screen name="ActiveSessions" component={ActiveSessionsScreen} />
     </Stack.Navigator>
   );
 }

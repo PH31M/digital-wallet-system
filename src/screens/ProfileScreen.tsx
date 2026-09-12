@@ -198,7 +198,7 @@ export function ProfileScreen() {
               icon="phonelink_setup"
               title="Thiết bị đăng nhập"
               subtitle={mockProfileDetails.devicesSummary}
-              onPress={comingSoon}
+              onPress={() => rootNavigation?.navigate('ActiveSessions')}
               trailing={
                 <View className="flex-row items-center gap-2">
                   <View className="bg-surface-container-highest px-1.5 py-0.5 rounded-full">
