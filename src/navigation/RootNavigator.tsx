@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { IconName } from '../components/Icon';
 import { StatusBadgeStatus } from '../components/StatusBadge';
 import { ComponentShowcaseScreen } from '../screens/ComponentShowcaseScreen';
+import { SplashScreen } from '../screens/SplashScreen';
 import { LoginScreen } from '../screens/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
@@ -63,6 +64,7 @@ export type TransactionDetailParams = {
 };
 
 export type RootStackParamList = {
+  Splash: undefined;
   Login: undefined;
   ForgotPassword: undefined;
   Register: undefined;
@@ -83,7 +85,8 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
   return (
-    <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
+    <Stack.Navigator initialRouteName="Splash" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
