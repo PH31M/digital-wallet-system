@@ -54,7 +54,10 @@ import static org.mockito.Mockito.when;
                 "jwt.refresh-expiration-ms=604800000",
                 "app.cors.allowed-origins=http://localhost:3000",
                 "management.endpoints.web.exposure.include=health,info,metrics,prometheus",
-                "management.endpoint.health.show-details=when-authorized"
+                "management.endpoint.health.show-details=when-authorized",
+                "management.health.redis.enabled=false",
+                "management.health.db.enabled=false",
+                "management.health.mail.enabled=false"
         })
 class ActuatorSecurityTest {
 
