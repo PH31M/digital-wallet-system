@@ -3,6 +3,7 @@ import { IconName } from '../components/Icon';
 import { StatusBadgeStatus } from '../components/StatusBadge';
 import { ComponentShowcaseScreen } from '../screens/ComponentShowcaseScreen';
 import { LoginScreen } from '../screens/LoginScreen';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { RegisterOtpScreen } from '../screens/RegisterOtpScreen';
 import { TransferScreen } from '../screens/TransferScreen';
@@ -62,6 +63,7 @@ export type TransactionDetailParams = {
 
 export type RootStackParamList = {
   Login: undefined;
+  ForgotPassword: undefined;
   Register: undefined;
   RegisterOtp: { phone: string };
   Main: undefined;
@@ -81,6 +83,7 @@ export function RootNavigator() {
   return (
     <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="RegisterOtp" component={RegisterOtpScreen} />
       <Stack.Screen name="Main" component={MainTabs} />

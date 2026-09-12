@@ -93,6 +93,10 @@ export const iconMap = {
   photo_camera: 'camera',
   cell_tower: 'antenna',
   chevron_left: 'chevron-left',
+  contact_mail: 'card-account-mail-outline',
+  phone_iphone: 'cellphone',
+  keyboard_backspace: 'arrow-left',
+  enhanced_encryption: 'shield-key-outline',
 } as const;
 
 export type IconName = keyof typeof iconMap;

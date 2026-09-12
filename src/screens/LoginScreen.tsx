@@ -85,7 +85,7 @@ export function LoginScreen() {
 
           <View className="flex-row items-center justify-between mt-space-xs">
             <Checkbox checked={rememberMe} onChange={setRememberMe} label="Ghi nhớ đăng nhập" />
-            <Pressable onPress={comingSoon}>
+            <Pressable onPress={() => navigation.navigate('ForgotPassword')}>
               <Text className="font-label-md text-label-md text-primary-container">Quên mật khẩu?</Text>
             </Pressable>
           </View>
