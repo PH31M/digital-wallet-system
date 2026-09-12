@@ -134,6 +134,18 @@ class AdminFraudReviewControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void review_noteContainsHtml_returns400() throws Exception {
+        User admin = user("admin@example.com", UserRole.ADMIN);
+
+        mockMvc.perform(post("/api/admin/fraud-assessments/{assessmentId}/review", UUID.randomUUID())
+                        .with(authentication(adminAuthentication(admin)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"action\":\"APPROVED\",\"note\":\"<script>alert(1)</script>\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.field").value("note"));
+    }
+
     private FraudReviewResponse sampleResponse(UUID assessmentId) {
         return new FraudReviewResponse(assessmentId, null, "ALLOW", BigDecimal.ZERO, null,
                 FraudReviewStatus.REVIEWED.name(), FraudReviewAction.APPROVED.name(), "looks fine", Instant.now(),

@@ -8,7 +8,6 @@ import com.digitalwallet.security.SecurityErrorResponseWriter;
 import com.digitalwallet.security.jwt.JwtTokenProvider;
 import com.digitalwallet.security.jwt.TokenBlacklistService;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
@@ -23,10 +22,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Optional;
@@ -38,95 +33,37 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Integration test cho DWS-228: xác nhận /actuator/health public (permitAll)
- * và /actuator/** (khác health/prometheus) yêu cầu role ADMIN, đúng thiết kế DWS-225.
+ * DWS-148: xác nhận security headers (CSP, Referrer-Policy, X-Content-Type-Options,
+ * X-Frame-Options) được filter chain gắn vào mọi response.
  *
- * Dùng một SpringBootConfiguration tối giản (không JPA/Flyway/Redis thật) tương tự
- * WebSocketNotificationIntegrationTest, nhưng KHÔNG loại trừ SecurityAutoConfiguration
- * vì đây chính là phần cần test.
+ * Dùng lại pattern TestApplication tối giản của ActuatorSecurityTest (không JPA/Flyway/Redis
+ * thật), chỉ gọi 1 endpoint public để request đi qua được filter chain.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        classes = ActuatorSecurityTest.TestApplication.class,
+        classes = SecurityHeadersTest.TestApplication.class,
         properties = {
                 "jwt.secret=unit-test-secret-key-must-be-at-least-32-chars-long",
                 "jwt.expiration-ms=3600000",
                 "jwt.refresh-expiration-ms=604800000",
                 "app.cors.allowed-origins=http://localhost:3000",
-                "management.endpoints.web.exposure.include=health,info,metrics,prometheus",
-                "management.endpoint.health.show-details=when-authorized",
                 "management.health.redis.enabled=false",
                 "management.health.db.enabled=false",
                 "management.health.mail.enabled=false"
         })
-class ActuatorSecurityTest {
+class SecurityHeadersTest {
 
-    @Autowired
+    @org.springframework.beans.factory.annotation.Autowired
     private TestRestTemplate restTemplate;
 
-    @Autowired
-    private JwtTokenProvider jwtTokenProvider;
-
     @Test
-    void health_withoutAuth_returns200Up() {
+    void anyResponse_includesSecurityHeaders() {
         ResponseEntity<String> response = restTemplate.getForEntity("/actuator/health", String.class);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("\"status\":\"UP\"");
-    }
-
-    @Test
-    void health_withUserJwt_returns200Up() {
-        String token = jwtTokenProvider.generateAccessToken(user("user@test.com", UserRole.USER));
-
-        ResponseEntity<String> response = restTemplate.exchange(
-                "/actuator/health", HttpMethod.GET, authorizedRequest(token), String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("\"status\":\"UP\"");
-    }
-
-    @Test
-    void metrics_withoutAuth_returns401() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/actuator/metrics", String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-    }
-
-    @Test
-    void metrics_withUserJwt_returns403() {
-        String token = jwtTokenProvider.generateAccessToken(user("user@test.com", UserRole.USER));
-
-        ResponseEntity<String> response = restTemplate.exchange(
-                "/actuator/metrics", HttpMethod.GET, authorizedRequest(token), String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    }
-
-    @Test
-    void metrics_withAdminJwt_returns200() {
-        String token = jwtTokenProvider.generateAccessToken(user("admin@test.com", UserRole.ADMIN));
-
-        ResponseEntity<String> response = restTemplate.exchange(
-                "/actuator/metrics", HttpMethod.GET, authorizedRequest(token), String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    }
-
-    private HttpEntity<Void> authorizedRequest(String token) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + token);
-        return new HttpEntity<>(headers);
-    }
-
-    private static User user(String email, UserRole role) {
-        User user = new User();
-        user.setId(UUID.randomUUID());
-        user.setPublicId(UUID.randomUUID());
-        user.setEmail(email);
-        user.setFullName("Test User");
-        user.setRole(role);
-        return user;
+        assertThat(response.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
+        assertThat(response.getHeaders().getFirst("X-Frame-Options")).isEqualTo("DENY");
+        assertThat(response.getHeaders().getFirst("Content-Security-Policy")).isNotBlank();
+        assertThat(response.getHeaders().getFirst("Referrer-Policy")).isEqualTo("no-referrer");
     }
 
     @SpringBootConfiguration
@@ -152,8 +89,6 @@ class ActuatorSecurityTest {
         @Bean
         UserRepository userRepository() {
             UserRepository repository = mock(UserRepository.class);
-            when(repository.findByEmail(eq("admin@test.com")))
-                    .thenReturn(Optional.of(user("admin@test.com", UserRole.ADMIN)));
             when(repository.findByEmail(eq("user@test.com")))
                     .thenReturn(Optional.of(user("user@test.com", UserRole.USER)));
             return repository;
@@ -167,6 +102,16 @@ class ActuatorSecurityTest {
                     return false;
                 }
             };
+        }
+
+        private static User user(String email, UserRole role) {
+            User user = new User();
+            user.setId(UUID.randomUUID());
+            user.setPublicId(UUID.randomUUID());
+            user.setEmail(email);
+            user.setFullName("Test User");
+            user.setRole(role);
+            return user;
         }
     }
 }

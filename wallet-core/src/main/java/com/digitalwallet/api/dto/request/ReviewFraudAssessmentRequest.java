@@ -1,5 +1,6 @@
 package com.digitalwallet.api.dto.request;
 
+import com.digitalwallet.common.validation.NoHtml;
 import com.digitalwallet.domain.enums.FraudReviewAction;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -10,6 +11,7 @@ public class ReviewFraudAssessmentRequest {
     private FraudReviewAction action;
 
     @Size(max = 1000, message = "Review note must not exceed 1000 characters")
+    @NoHtml
     private String note;
 
     public FraudReviewAction getAction() {
