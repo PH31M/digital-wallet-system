@@ -21,6 +21,7 @@ import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.actuate.autoconfigure.security.servlet.ManagementWebSecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
@@ -133,8 +134,12 @@ class WebSocketNotificationIntegrationTest {
     }
 
     @SpringBootConfiguration
+    // ManagementWebSecurityAutoConfiguration phải bị loại cùng SecurityAutoConfiguration: nó tự
+    // kích hoạt khi thiếu SecurityFilterChain bean (do actuator có mặt trên classpath) và cần
+    // HttpSecurity - bean này chỉ được cấp bởi chính SecurityAutoConfiguration đã bị loại ở trên.
     @EnableAutoConfiguration(exclude = {
             SecurityAutoConfiguration.class,
+            ManagementWebSecurityAutoConfiguration.class,
             DataSourceAutoConfiguration.class,
             DataSourceTransactionManagerAutoConfiguration.class,
             HibernateJpaAutoConfiguration.class,
