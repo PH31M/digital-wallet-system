@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  backend-test:
+    name: Backend (wallet-core) - mvn test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: digital_wallet
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d digital_wallet"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: wallet-core
+
+    env:
+      DB_URL: jdbc:postgresql://localhost:5432/digital_wallet
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      JWT_SECRET: ci-test-secret-do-not-use-in-prod-0123456789
+      JWT_EXPIRATION: 900000
+      JWT_REFRESH_EXPIRATION: 604800000
+      MAIL_HOST: localhost
+      MAIL_PORT: 1025
+      MOMO_PARTNER_CODE: TEST_PARTNER_CODE
+      MOMO_ACCESS_KEY: TEST_ACCESS_KEY
+      MOMO_SECRET_KEY: TEST_SECRET_KEY
+      MOMO_ENDPOINT: https://test-payment.momo.vn/v2/gateway/api/create
+      MOMO_REDIRECT_URL: http://localhost:8089/momo/redirect
+      MOMO_IPN_URL: http://localhost:8089/momo/ipn
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: wallet-core/pom.xml
+
+      - name: Run mvn test
+        run: mvn -B -ntp test
