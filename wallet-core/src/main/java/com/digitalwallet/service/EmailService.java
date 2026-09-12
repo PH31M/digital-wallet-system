@@ -12,6 +12,8 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+
 @Service
 public class EmailService {
 
@@ -39,6 +41,12 @@ public class EmailService {
     public void sendMfaEmail(String toEmail, String otp) {
         sendOtpEmail(toEmail, "Ma xac thuc dang nhap Digital Wallet System",
                 "Ma OTP dang nhap cua ban la: %s".formatted(otp));
+    }
+
+    @Async("asyncExecutor")
+    public void sendTransactionOtpEmail(String toEmail, String otp, BigDecimal amount) {
+        sendOtpEmail(toEmail, "Xac nhan giao dich Digital Wallet System",
+                "Ma OTP xac nhan giao dich %s cua ban la: %s".formatted(amount, otp));
     }
 
     public void sendSimpleEmail(String toEmail, String subject, String text) throws MailException {

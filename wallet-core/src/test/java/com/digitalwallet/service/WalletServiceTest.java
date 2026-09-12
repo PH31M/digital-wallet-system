@@ -12,6 +12,7 @@ import com.digitalwallet.domain.entity.Wallet;
 import com.digitalwallet.domain.enums.AuditAction;
 import com.digitalwallet.domain.enums.AuditActorType;
 import com.digitalwallet.domain.enums.FraudDecision;
+import com.digitalwallet.domain.enums.TransactionStatus;
 import com.digitalwallet.domain.enums.TransactionType;
 import com.digitalwallet.domain.enums.UserRole;
 import com.digitalwallet.domain.enums.WalletStatus;
@@ -34,6 +35,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -71,6 +73,12 @@ class WalletServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private OtpService otpService;
+
+    @Mock
+    private EmailOtpService emailOtpService;
 
     @Test
     void deposit_creditsWalletWritesBalancedLedgerAndEmitsControls() {
@@ -291,9 +299,193 @@ class WalletServiceTest {
                 .isEqualTo(ErrorCode.ACCESS_DENIED);
     }
 
+    void transfer_amountAtOrAboveOtpThreshold_holdsForOtpConfirmationWithoutMovingFunds() {
+        WalletService walletService = walletService();
+        RequestMetadata metadata = metadata();
+        User sender = user();
+        User receiver = user();
+        Wallet senderWallet = wallet(sender, new BigDecimal("10000000.00"));
+        Wallet receiverWallet = wallet(receiver, new BigDecimal("5.00"));
+        TransferRequest request = new TransferRequest(receiverWallet.getId(), OTP_REQUIRED_AMOUNT, "otp-transfer");
+
+        when(transactionRepository.findByIdempotencyKey("otp-transfer")).thenReturn(Optional.empty());
+        when(walletRepository.findByUserId(sender.getId())).thenReturn(Optional.of(senderWallet));
+        when(walletRepository.findByIdForUpdate(senderWallet.getId())).thenReturn(Optional.of(senderWallet));
+        when(walletRepository.findByIdForUpdate(receiverWallet.getId())).thenReturn(Optional.of(receiverWallet));
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionResponse response = walletService.transfer(sender, request, metadata);
+
+        assertThat(response.getStatus()).isEqualTo("PENDING_OTP_CONFIRMATION");
+        assertThat(senderWallet.getBalance()).isEqualByComparingTo("10000000.00");
+        assertThat(receiverWallet.getBalance()).isEqualByComparingTo("5.00");
+        verify(emailOtpService).sendTransactionOtp(eq(sender), any(Transaction.class));
+        verify(auditService).log(eq(sender), eq(AuditActorType.USER), eq(AuditAction.TRANSACTION_OTP_REQUIRED),
+                eq("TRANSACTION"), any(), eq("127.0.0.1"), eq("JUnit"), eq(metadata.requestId()));
+        verify(ledgerEntryRepository, never()).saveAll(any());
+        verify(eventPublisher, never()).publishEvent(any(BalanceUpdatedEvent.class));
+    }
+
+    @Test
+    void withdraw_amountAtOrAboveOtpThreshold_holdsForOtpConfirmationWithoutDebiting() {
+        WalletService walletService = walletService();
+        RequestMetadata metadata = metadata();
+        User user = user();
+        Wallet wallet = wallet(user, new BigDecimal("10000000.00"));
+        WalletAmountRequest request = new WalletAmountRequest(OTP_REQUIRED_AMOUNT, "otp-withdraw");
+
+        when(transactionRepository.findByIdempotencyKey("otp-withdraw")).thenReturn(Optional.empty());
+        when(walletRepository.findByUserId(user.getId())).thenReturn(Optional.of(wallet));
+        when(walletRepository.findByIdForUpdate(wallet.getId())).thenReturn(Optional.of(wallet));
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransactionResponse response = walletService.withdraw(user, request, metadata);
+
+        assertThat(response.getStatus()).isEqualTo("PENDING_OTP_CONFIRMATION");
+        assertThat(wallet.getBalance()).isEqualByComparingTo("10000000.00");
+        verify(emailOtpService).sendTransactionOtp(eq(user), any(Transaction.class));
+        verify(ledgerEntryRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void confirmOtp_correctOtp_executesPendingTransferAndMovesFunds() {
+        WalletService walletService = walletService();
+        RequestMetadata metadata = metadata();
+        User sender = user();
+        User receiver = user();
+        Wallet senderWallet = wallet(sender, new BigDecimal("10000000.00"));
+        Wallet receiverWallet = wallet(receiver, new BigDecimal("5.00"));
+        Transaction transaction = pendingOtpTransfer(senderWallet, receiverWallet, OTP_REQUIRED_AMOUNT);
+
+        when(transactionRepository.findByIdForUpdate(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(walletRepository.findByIdForUpdate(senderWallet.getId())).thenReturn(Optional.of(senderWallet));
+        when(walletRepository.findByIdForUpdate(receiverWallet.getId())).thenReturn(Optional.of(receiverWallet));
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(otpService.verifyTransactionOtp(sender.getId(), "123456")).thenReturn(true);
+
+        TransactionResponse response = walletService.confirmOtp(sender, transaction.getId(), "123456", metadata);
+
+        assertThat(response.getStatus()).isEqualTo("COMPLETED");
+        assertThat(senderWallet.getBalance()).isEqualByComparingTo("5000000.00");
+        assertThat(receiverWallet.getBalance()).isEqualByComparingTo("5000005.00");
+        verify(auditService).log(eq(sender), eq(AuditActorType.USER), eq(AuditAction.TRANSFER_COMPLETED),
+                eq("TRANSACTION"), any(), eq("127.0.0.1"), eq("JUnit"), eq(metadata.requestId()));
+        verifyPublishedEvent(BalanceUpdatedEvent.class, 2);
+        verifyPublishedEvent(TransactionCompletedEvent.class);
+    }
+
+    @Test
+    void confirmOtp_differentUser_throwsAccessDeniedWithoutVerifyingOtp() {
+        WalletService walletService = walletService();
+        User sender = user();
+        User receiver = user();
+        User attacker = user();
+        Wallet senderWallet = wallet(sender, new BigDecimal("10000000.00"));
+        Wallet receiverWallet = wallet(receiver, new BigDecimal("5.00"));
+        Transaction transaction = pendingOtpTransfer(senderWallet, receiverWallet, OTP_REQUIRED_AMOUNT);
+
+        when(transactionRepository.findByIdForUpdate(transaction.getId())).thenReturn(Optional.of(transaction));
+
+        assertThatThrownBy(() -> walletService.confirmOtp(attacker, transaction.getId(), "123456", metadata()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+
+        verify(otpService, never()).hasExceededTransactionOtpAttempts(any());
+        verify(otpService, never()).verifyTransactionOtp(any(), any());
+        assertThat(senderWallet.getBalance()).isEqualByComparingTo("10000000.00");
+    }
+
+    @Test
+    void confirmOtp_wrongOtp_incrementsAttemptsAndThrowsOtpExpired() {
+        WalletService walletService = walletService();
+        User sender = user();
+        User receiver = user();
+        Wallet senderWallet = wallet(sender, new BigDecimal("10000000.00"));
+        Wallet receiverWallet = wallet(receiver, new BigDecimal("5.00"));
+        Transaction transaction = pendingOtpTransfer(senderWallet, receiverWallet, OTP_REQUIRED_AMOUNT);
+
+        when(transactionRepository.findByIdForUpdate(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(otpService.verifyTransactionOtp(sender.getId(), "000000")).thenReturn(false);
+
+        assertThatThrownBy(() -> walletService.confirmOtp(sender, transaction.getId(), "000000", metadata()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.OTP_EXPIRED);
+
+        verify(otpService).incrementTransactionOtpAttempts(sender.getId());
+        assertThat(senderWallet.getBalance()).isEqualByComparingTo("10000000.00");
+    }
+
+    @Test
+    void confirmOtp_maxAttemptsExceeded_throwsOtpMaxAttemptsWithoutVerifying() {
+        WalletService walletService = walletService();
+        User sender = user();
+        User receiver = user();
+        Wallet senderWallet = wallet(sender, new BigDecimal("10000000.00"));
+        Wallet receiverWallet = wallet(receiver, new BigDecimal("5.00"));
+        Transaction transaction = pendingOtpTransfer(senderWallet, receiverWallet, OTP_REQUIRED_AMOUNT);
+
+        when(transactionRepository.findByIdForUpdate(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(otpService.hasExceededTransactionOtpAttempts(sender.getId())).thenReturn(true);
+
+        assertThatThrownBy(() -> walletService.confirmOtp(sender, transaction.getId(), "123456", metadata()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.OTP_MAX_ATTEMPTS);
+
+        verify(otpService, never()).verifyTransactionOtp(any(), any());
+    }
+
+    @Test
+    void confirmOtp_transactionAlreadyCompleted_throwsOtpConfirmationNotPending() {
+        WalletService walletService = walletService();
+        User sender = user();
+        User receiver = user();
+        Wallet senderWallet = wallet(sender, new BigDecimal("10000000.00"));
+        Wallet receiverWallet = wallet(receiver, new BigDecimal("5.00"));
+        Transaction transaction = pendingOtpTransfer(senderWallet, receiverWallet, OTP_REQUIRED_AMOUNT);
+        transaction.complete();
+
+        when(transactionRepository.findByIdForUpdate(transaction.getId())).thenReturn(Optional.of(transaction));
+
+        assertThatThrownBy(() -> walletService.confirmOtp(sender, transaction.getId(), "123456", metadata()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.OTP_CONFIRMATION_NOT_PENDING);
+
+        verify(otpService, never()).verifyTransactionOtp(any(), any());
+    }
+
+    @Test
+    void expirePendingOtpTransactions_failsStaleTransactionsAndPublishesFailureEvent() {
+        WalletService walletService = walletService();
+        User sender = user();
+        User receiver = user();
+        Wallet senderWallet = wallet(sender, new BigDecimal("10000000.00"));
+        Wallet receiverWallet = wallet(receiver, new BigDecimal("5.00"));
+        Transaction transaction = pendingOtpTransfer(senderWallet, receiverWallet, OTP_REQUIRED_AMOUNT);
+
+        when(otpService.getOtpTtl()).thenReturn(Duration.ofMinutes(10));
+        when(transactionRepository.findByStatusAndCreatedAtBefore(eq(TransactionStatus.PENDING_OTP_CONFIRMATION), any()))
+                .thenReturn(List.of(transaction));
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        int expiredCount = walletService.expirePendingOtpTransactions();
+
+        assertThat(expiredCount).isEqualTo(1);
+        assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.FAILED);
+        verify(auditService).log(eq(sender), eq(AuditActorType.SYSTEM), eq(AuditAction.TRANSACTION_OTP_EXPIRED),
+                eq("TRANSACTION"), eq(transaction.getId()), eq("system"), eq("scheduled-cleanup-job"), any());
+        verifyPublishedEvent(TransactionFailedEvent.class);
+    }
+
+    private static final BigDecimal OTP_REQUIRED_AMOUNT = new BigDecimal("5000000");
+
     private WalletService walletService() {
         return new WalletService(walletRepository, transactionRepository, ledgerEntryRepository,
-                fraudService, transactionLimitService, auditService, eventPublisher);
+                fraudService, transactionLimitService, auditService, eventPublisher,
+                otpService, emailOtpService, OTP_REQUIRED_AMOUNT);
     }
 
     private RequestMetadata metadata() {
@@ -320,6 +512,17 @@ class WalletServiceTest {
         wallet.setBalance(balance);
         wallet.setStatus(WalletStatus.ACTIVE);
         return wallet;
+    }
+
+    private Transaction pendingOtpTransfer(Wallet senderWallet, Wallet receiverWallet, BigDecimal amount) {
+        Transaction transaction = new Transaction();
+        transaction.setId(UUID.randomUUID());
+        transaction.setTransactionType(TransactionType.TRANSFER);
+        transaction.setAmount(amount);
+        transaction.setSenderWallet(senderWallet);
+        transaction.setReceiverWallet(receiverWallet);
+        transaction.awaitOtpConfirmation();
+        return transaction;
     }
 
     private FraudAssessment fraudAssessment(FraudDecision decision) {

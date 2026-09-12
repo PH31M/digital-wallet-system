@@ -31,12 +31,14 @@ import com.digitalwallet.exception.ErrorCode;
 import com.digitalwallet.exception.InsufficientBalanceException;
 import com.digitalwallet.exception.WalletFrozenException;
 import com.digitalwallet.util.ReferenceNumberGenerator;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -53,11 +55,15 @@ public class WalletService {
     private final TransactionLimitService transactionLimitService;
     private final AuditService auditService;
     private final ApplicationEventPublisher eventPublisher;
+    private final OtpService otpService;
+    private final EmailOtpService emailOtpService;
+    private final BigDecimal otpRequiredAmount;
 
     public WalletService(WalletRepository walletRepository, TransactionRepository transactionRepository,
             LedgerEntryRepository ledgerEntryRepository, FraudService fraudService,
             TransactionLimitService transactionLimitService, AuditService auditService,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher, OtpService otpService, EmailOtpService emailOtpService,
+            @Value("${wallet.otp.required-amount:5000000}") BigDecimal otpRequiredAmount) {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
@@ -65,6 +71,9 @@ public class WalletService {
         this.transactionLimitService = transactionLimitService;
         this.auditService = auditService;
         this.eventPublisher = eventPublisher;
+        this.otpService = otpService;
+        this.emailOtpService = emailOtpService;
+        this.otpRequiredAmount = otpRequiredAmount;
     }
 
     @Transactional(readOnly = true)
@@ -135,6 +144,9 @@ public class WalletService {
         if (holdForReviewIfNecessary(savedTransaction, currentUser, metadata)) {
             return TransactionResponse.from(savedTransaction);
         }
+        if (holdForOtpConfirmationIfNecessary(savedTransaction, currentUser, metadata)) {
+            return TransactionResponse.from(savedTransaction);
+        }
 
         wallet.debit(request.getAmount());
         walletRepository.save(wallet);
@@ -188,6 +200,9 @@ public class WalletService {
         if (holdForReviewIfNecessary(savedTransaction, currentUser, metadata)) {
             return TransactionResponse.from(savedTransaction);
         }
+        if (holdForOtpConfirmationIfNecessary(savedTransaction, currentUser, metadata)) {
+            return TransactionResponse.from(savedTransaction);
+        }
 
         lockedSender.debit(request.getAmount());
         lockedReceiver.credit(request.getAmount());
@@ -229,6 +244,56 @@ public class WalletService {
         return ledgerEntryRepository.findByTransactionId(transactionId).stream()
                 .map(LedgerEntryResponse::from)
                 .toList();
+    }
+
+    @Transactional(noRollbackFor = BusinessException.class)
+    public TransactionResponse confirmOtp(User currentUser, UUID transactionId, String otp, RequestMetadata metadata) {
+        Transaction transaction = transactionRepository.findByIdForUpdate(transactionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        User initiator = initiatorFor(transaction);
+        if (!Objects.equals(initiator.getId(), currentUser.getId())) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
+
+        if (!transaction.isPendingOtpConfirmation()) {
+            throw new BusinessException(ErrorCode.OTP_CONFIRMATION_NOT_PENDING);
+        }
+
+        if (otpService.hasExceededTransactionOtpAttempts(currentUser.getId())) {
+            throw new BusinessException(ErrorCode.OTP_MAX_ATTEMPTS);
+        }
+        if (!otpService.verifyTransactionOtp(currentUser.getId(), otp)) {
+            otpService.incrementTransactionOtpAttempts(currentUser.getId());
+            throw new BusinessException(ErrorCode.OTP_EXPIRED);
+        }
+
+        transaction.setStatus(TransactionStatus.PROCESSING);
+        List<TransactionCompletedEvent.Recipient> recipients = executePendingTransaction(transaction, initiator);
+
+        transaction.complete();
+        Transaction completed = transactionRepository.save(transaction);
+        audit(completed, initiator, completionAction(completed), metadata);
+        publishTransactionCompleted(completed, recipients.toArray(TransactionCompletedEvent.Recipient[]::new));
+        return TransactionResponse.from(completed);
+    }
+
+    @Transactional
+    public int expirePendingOtpTransactions() {
+        Instant cutoff = Instant.now().minus(otpService.getOtpTtl());
+        List<Transaction> expired = transactionRepository.findByStatusAndCreatedAtBefore(
+                TransactionStatus.PENDING_OTP_CONFIRMATION, cutoff);
+
+        for (Transaction transaction : expired) {
+            transaction.fail();
+            Transaction failed = transactionRepository.save(transaction);
+            User initiator = initiatorFor(failed);
+            auditService.log(initiator, AuditActorType.SYSTEM, AuditAction.TRANSACTION_OTP_EXPIRED,
+                    "TRANSACTION", failed.getId(), "system", "scheduled-cleanup-job", UUID.randomUUID());
+            eventPublisher.publishEvent(TransactionFailedEvent.of(
+                    initiator, failed, "OTP confirmation window expired"));
+        }
+        return expired.size();
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
@@ -376,6 +441,18 @@ public class WalletService {
         }
 
         return false;
+    }
+
+    private boolean holdForOtpConfirmationIfNecessary(Transaction transaction, User currentUser, RequestMetadata metadata) {
+        if (transaction.getAmount().compareTo(otpRequiredAmount) < 0) {
+            return false;
+        }
+
+        transaction.awaitOtpConfirmation();
+        Transaction held = transactionRepository.save(transaction);
+        audit(held, currentUser, AuditAction.TRANSACTION_OTP_REQUIRED, metadata);
+        emailOtpService.sendTransactionOtp(currentUser, held);
+        return true;
     }
 
     private FraudDecision assessFraud(Transaction transaction) {

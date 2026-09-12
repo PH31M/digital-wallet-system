@@ -171,6 +171,14 @@ public class Transaction extends BaseAuditableEntity {
         return status == TransactionStatus.PENDING_REVIEW;
     }
 
+    public void awaitOtpConfirmation() {
+        this.status = TransactionStatus.PENDING_OTP_CONFIRMATION;
+    }
+
+    public boolean isPendingOtpConfirmation() {
+        return status == TransactionStatus.PENDING_OTP_CONFIRMATION;
+    }
+
     public void complete() {
         this.status = TransactionStatus.COMPLETED;
         this.completedAt = Instant.now();

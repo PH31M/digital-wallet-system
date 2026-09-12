@@ -1,5 +1,6 @@
 package com.digitalwallet.service;
 
+import com.digitalwallet.domain.entity.Transaction;
 import com.digitalwallet.domain.entity.User;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -34,5 +35,12 @@ public class EmailOtpService {
         String otp = otpService.generateOtp();
         otpService.saveMfaOtp(user.getId(), otp);
         emailService.sendMfaEmail(user.getEmail(), otp);
+    }
+
+    @Async("asyncExecutor")
+    public void sendTransactionOtp(User user, Transaction transaction) {
+        String otp = otpService.generateOtp();
+        otpService.saveTransactionOtp(user.getId(), otp);
+        emailService.sendTransactionOtpEmail(user.getEmail(), otp, transaction.getAmount());
     }
 }
