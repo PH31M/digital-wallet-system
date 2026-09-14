@@ -4,6 +4,7 @@ import com.digitalwallet.api.dto.request.TransferRequest;
 import com.digitalwallet.api.dto.request.WalletAmountRequest;
 import com.digitalwallet.api.dto.response.LedgerEntryResponse;
 import com.digitalwallet.api.dto.response.TransactionResponse;
+import com.digitalwallet.api.dto.response.WalletLookupResponse;
 import com.digitalwallet.api.dto.response.WalletResponse;
 import com.digitalwallet.common.request.RequestMetadata;
 import com.digitalwallet.domain.entity.FraudAssessment;
@@ -25,6 +26,7 @@ import com.digitalwallet.domain.event.TransactionCompletedEvent;
 import com.digitalwallet.domain.event.TransactionFailedEvent;
 import com.digitalwallet.domain.repository.LedgerEntryRepository;
 import com.digitalwallet.domain.repository.TransactionRepository;
+import com.digitalwallet.domain.repository.UserRepository;
 import com.digitalwallet.domain.repository.WalletRepository;
 import com.digitalwallet.exception.BusinessException;
 import com.digitalwallet.exception.ErrorCode;
@@ -51,6 +53,7 @@ public class WalletService {
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final UserRepository userRepository;
     private final FraudService fraudService;
     private final TransactionLimitService transactionLimitService;
     private final AuditService auditService;
@@ -60,13 +63,14 @@ public class WalletService {
     private final BigDecimal otpRequiredAmount;
 
     public WalletService(WalletRepository walletRepository, TransactionRepository transactionRepository,
-            LedgerEntryRepository ledgerEntryRepository, FraudService fraudService,
+            LedgerEntryRepository ledgerEntryRepository, UserRepository userRepository, FraudService fraudService,
             TransactionLimitService transactionLimitService, AuditService auditService,
             ApplicationEventPublisher eventPublisher, OtpService otpService, EmailOtpService emailOtpService,
             @Value("${wallet.otp.required-amount:5000000}") BigDecimal otpRequiredAmount) {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
+        this.userRepository = userRepository;
         this.fraudService = fraudService;
         this.transactionLimitService = transactionLimitService;
         this.auditService = auditService;
@@ -87,6 +91,47 @@ public class WalletService {
         Wallet wallet = walletRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         return toWalletResponse(wallet);
+    }
+
+    /**
+     * Tra cứu ví người nhận theo email hoặc số điện thoại — cần cho màn Chuyển tiền tìm UUID
+     * ví thật (mobile không có cách nào khác lấy được receiver_wallet_id). Chỉ trả về
+     * wallet_id + tên đã che bớt + trạng thái ví, KHÔNG trả email/SĐT/số dư của người khác.
+     */
+    @Transactional(readOnly = true)
+    public WalletLookupResponse lookupRecipient(String identifier) {
+        String normalized = identifier == null ? "" : identifier.trim().toLowerCase();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Identifier is required");
+        }
+
+        User recipient = userRepository.findByEmail(normalized)
+                .or(() -> userRepository.findByPhoneNumber(normalized))
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        Wallet wallet = walletRepository.findByUserId(recipient.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        return new WalletLookupResponse(wallet.getId(), maskName(recipient.getFullName()), wallet.getStatus().name());
+    }
+
+    private String maskName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return "";
+        }
+        String[] words = fullName.trim().split("\\s+");
+        StringBuilder masked = new StringBuilder();
+        for (int i = 0; i < words.length; i++) {
+            if (i > 0) {
+                masked.append(' ');
+            }
+            String word = words[i];
+            masked.append(word.charAt(0));
+            if (word.length() > 1) {
+                masked.append("*".repeat(word.length() - 1));
+            }
+        }
+        return masked.toString();
     }
 
     @Transactional(noRollbackFor = BusinessException.class)

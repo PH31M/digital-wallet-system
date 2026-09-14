@@ -4,6 +4,7 @@ import com.digitalwallet.api.dto.request.TransferRequest;
 import com.digitalwallet.api.dto.request.WalletAmountRequest;
 import com.digitalwallet.api.dto.response.LedgerEntryResponse;
 import com.digitalwallet.api.dto.response.TransactionResponse;
+import com.digitalwallet.api.dto.response.WalletLookupResponse;
 import com.digitalwallet.api.dto.response.WalletResponse;
 import com.digitalwallet.common.request.RequestIds;
 import com.digitalwallet.common.request.RequestMetadata;
@@ -13,12 +14,15 @@ import com.digitalwallet.security.CurrentUser;
 import com.digitalwallet.service.WalletService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -27,6 +31,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/wallets")
+@Validated
 public class WalletController {
 
     private final WalletService walletService;
@@ -42,6 +47,20 @@ public class WalletController {
         UUID requestId = RequestIds.getUuid(httpRequest);
         WalletResponse wallet = walletService.getCurrentUserWallet(currentUser);
         return ResponseEntity.ok(ApiResponse.success(requestId.toString(), Instant.now(), wallet));
+    }
+
+    /**
+     * Tra cứu ví người nhận theo email/SĐT cho màn Chuyển tiền — không có cách nào khác để
+     * mobile lấy được receiver_wallet_id (UUID nội bộ) trước khi có endpoint này.
+     */
+    @GetMapping("/lookup")
+    public ResponseEntity<ApiResponse<WalletLookupResponse>> lookupRecipient(
+            @CurrentUser User currentUser,
+            @RequestParam @NotBlank String identifier,
+            HttpServletRequest httpRequest) {
+        UUID requestId = RequestIds.getUuid(httpRequest);
+        WalletLookupResponse response = walletService.lookupRecipient(identifier);
+        return ResponseEntity.ok(ApiResponse.success(requestId.toString(), Instant.now(), response));
     }
 
     @GetMapping("/{id}")
