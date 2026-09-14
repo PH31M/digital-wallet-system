@@ -7,12 +7,17 @@ import { Icon } from '../components/Icon';
 import { Logo } from '../components/Logo';
 import { colors } from '../theme/tokens';
 import { RootStackParamList } from '../navigation/RootNavigator';
+import { useAuth } from '../auth/AuthContext';
 
 const SPLASH_DURATION_MS = 1800;
 
 /**
  * Màn chờ có thương hiệu, hiển thị 1 lần khi app khởi động (sau khi native splash của Expo
- * đã ẩn) rồi tự chuyển sang Đăng nhập — khác với `expo-splash-screen` (chỉ che lúc load font).
+ * đã ẩn) rồi tự chuyển sang Đăng nhập HOẶC thẳng vào Main nếu đã có phiên đăng nhập hợp lệ
+ * (AuthProvider bootstrap — xem AuthContext.tsx) — khác với `expo-splash-screen` (chỉ che lúc
+ * load font). Điều hướng chờ CẢ 2 điều kiện: hết thời gian hiệu ứng tối thiểu VÀ
+ * `authStatus` không còn 'bootstrapping' (bootstrap có thể xong trước hoặc sau khi hết hiệu
+ * ứng, tuỳ tốc độ mạng khi refresh/lấy profile).
  * Các vòng tròn glow nền và hiệu ứng backdrop-blur trong code.html được thay bằng khối màu
  * bán trong suốt đơn giản (RN không hỗ trợ CSS blur trên native, giống quyết định đã áp dụng
  * cho AppHeader).
@@ -20,6 +25,8 @@ const SPLASH_DURATION_MS = 1800;
 export function SplashScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const progress = useRef(new Animated.Value(0)).current;
+  const mountedAt = useRef(Date.now()).current;
+  const { status: authStatus } = useAuth();
 
   useEffect(() => {
     Animated.timing(progress, {
@@ -28,12 +35,22 @@ export function SplashScreen() {
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
+  }, [progress]);
 
+  useEffect(() => {
+    if (authStatus === 'bootstrapping') return;
+
+    // Chờ NỐT thời gian hiệu ứng còn lại (không cộng dồn thêm 1.8s sau khi bootstrap xong) —
+    // bootstrap (gọi GET /users/me để xác thực token cũ) có thể xong trước hoặc sau khi hiệu
+    // ứng kết thúc tuỳ tốc độ mạng.
+    const remaining = Math.max(0, SPLASH_DURATION_MS - (Date.now() - mountedAt));
     const timer = setTimeout(() => {
-      navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Login' }] }));
-    }, SPLASH_DURATION_MS);
+      navigation.dispatch(
+        CommonActions.reset({ index: 0, routes: [{ name: authStatus === 'signedIn' ? 'Main' : 'Login' }] }),
+      );
+    }, remaining);
     return () => clearTimeout(timer);
-  }, [navigation, progress]);
+  }, [authStatus, mountedAt, navigation]);
 
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ['12%', '100%'] });
 

@@ -10,14 +10,23 @@ import { GoogleIcon } from '../components/GoogleIcon';
 import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
 import { Logo } from '../components/Logo';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { getApiErrorMessage } from '../api/apiError';
 import { colors } from '../theme/tokens';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 type LoginState = 'idle' | 'loading' | 'success';
 
+// Backend chỉ hỗ trợ đăng nhập bằng email (LoginRequest.email + AuthService.login tra bằng
+// userRepository.findByEmail) — KHÔNG có tra cứu theo số điện thoại, dù nhãn field UI ghi
+// "Email hoặc số điện thoại" (đúng theo thiết kế export gốc). Validate nhẹ ở đây để báo lỗi
+// rõ ràng thay vì gửi lên backend rồi nhận lỗi khó hiểu.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function LoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { login } = useAuth();
   const { showToast } = useToast();
 
   const [identifier, setIdentifier] = useState('');
@@ -33,16 +42,31 @@ export function LoginScreen() {
     navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Main' }] }));
   }
 
-  function handleLogin() {
-    if (!identifier.trim() || !password) {
+  async function handleLogin() {
+    const email = identifier.trim();
+    if (!email || !password) {
       showToast('Vui lòng nhập đầy đủ thông tin đăng nhập', 'danger');
       return;
     }
+    if (!EMAIL_PATTERN.test(email)) {
+      showToast('Hệ thống hiện chỉ hỗ trợ đăng nhập bằng email, chưa hỗ trợ số điện thoại', 'danger');
+      return;
+    }
+
     setLoginState('loading');
-    setTimeout(() => {
+    try {
+      const result = await login(email, password);
+      if (result.mfaRequired) {
+        setLoginState('idle');
+        navigation.navigate('MfaVerify', { email });
+        return;
+      }
       setLoginState('success');
       setTimeout(goToApp, 500);
-    }, 800);
+    } catch (error) {
+      setLoginState('idle');
+      showToast(getApiErrorMessage(error, 'Đăng nhập thất bại, vui lòng thử lại'), 'danger');
+    }
   }
 
   return (

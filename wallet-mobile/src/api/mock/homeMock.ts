@@ -4,15 +4,15 @@ import { TransactionHistoryItemResponse, UserProfileResponse, WalletResponse } f
 /**
  * Dữ liệu giả lập cho Trang chủ — khớp 1:1 với demo data trong
  * `UI Digital wallet system/Trang chủ/code.html`, dùng tạm cho tới khi nối API thật
- * (`GET /api/v1/wallets/me`, `GET /api/v1/transactions/history?size=5`).
+ * (`GET /wallets/me`, `GET /transactions/history?size=5`).
  */
 
 export const mockUserProfile: UserProfileResponse = {
   id: 'a1b2c3d4-0000-4000-8000-000000000001',
   email: 'an.nguyen@example.com',
-  full_name: 'Nguyễn Văn An',
-  phone_number: '0987654321',
-  is_verified: true,
+  fullName: 'Nguyễn Văn An',
+  phoneNumber: '0987654321',
+  isVerified: true,
 };
 
 export const mockWallet: WalletResponse = {

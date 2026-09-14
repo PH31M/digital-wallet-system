@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,14 +10,32 @@ import { Card } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
 import { TransactionListItem } from '../components/TransactionListItem';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
-import { HistoryFilterCategory, MockHistoryItem, mockHistoryTransactions } from '../api/mock/historyMock';
+import { getTransactionHistoryApi } from '../api/walletApi';
+import { TransactionHistoryItemResponse } from '../types/api';
 import { formatCurrency } from '../utils/formatCurrency';
 import { dateGroupKey, formatDateGroupLabel, formatTimeOfDay } from '../utils/formatRelativeTime';
 import { mapTransactionStatusToBadge } from '../utils/mapTransactionStatus';
+import { getTransactionIcon, getTransactionTypeLabel } from '../utils/transactionDisplay';
 import { MainTabsParamList } from '../navigation/MainTabs';
 import { RootStackParamList } from '../navigation/RootNavigator';
+
+const PAGE_SIZE = 20;
+
+/**
+ * `TransactionHistoryFilter` thật (`type`/`status`) chỉ nhận ĐÚNG 1 giá trị enum mỗi lần —
+ * không lọc được theo chiều tiền (không có field `direction` nào trong filter), không lọc
+ * được nhiều status cùng lúc (không thể "type IN (DEPOSIT, WITHDRAW)" cho chip "Nạp / Rút",
+ * hay "status IN (4 trạng thái pending)" cho chip "Chờ duyệt" bằng 1 lời gọi) — xem
+ * `LedgerEntrySpecifications.typeEquals/statusEquals` (equality thuần, không phải IN-list).
+ * Vì 4/6 chip không thể lọc server-side bằng 1 request, toàn bộ filter chip + tìm kiếm ở đây
+ * lọc phía client trên dữ liệu ĐÃ TẢI (giống hệt cách bản mock cũ hoạt động, chỉ khác nguồn dữ
+ * liệu giờ là API thật có phân trang) — hệ quả: 1 chip hẹp có thể cần bấm "Tải thêm" nhiều lần
+ * mới thấy đủ kết quả, không lọc được xuyên suốt toàn bộ lịch sử ngay lập tức.
+ */
+type HistoryFilterCategory = 'all' | 'inflow' | 'outflow' | 'transfer' | 'topup' | 'pending';
 
 const FILTER_CHIPS: { key: HistoryFilterCategory; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
@@ -27,9 +46,28 @@ const FILTER_CHIPS: { key: HistoryFilterCategory; label: string }[] = [
   { key: 'pending', label: 'Chờ duyệt' },
 ];
 
-function groupByDate(items: MockHistoryItem[]) {
+function matchesCategory(item: TransactionHistoryItemResponse, category: HistoryFilterCategory): boolean {
+  switch (category) {
+    case 'all':
+      return true;
+    case 'inflow':
+      return item.direction === 'CREDIT';
+    case 'outflow':
+      return item.direction === 'DEBIT';
+    case 'transfer':
+      return item.type === 'TRANSFER';
+    case 'topup':
+      return item.type === 'DEPOSIT' || item.type === 'WITHDRAW';
+    case 'pending':
+      return item.status !== 'COMPLETED' && item.status !== 'FAILED';
+    default:
+      return true;
+  }
+}
+
+function groupByDate(items: TransactionHistoryItemResponse[]) {
   const order: string[] = [];
-  const map = new Map<string, MockHistoryItem[]>();
+  const map = new Map<string, TransactionHistoryItemResponse[]>();
 
   for (const item of items) {
     const key = dateGroupKey(item.createdAt);
@@ -46,12 +84,27 @@ function groupByDate(items: MockHistoryItem[]) {
   });
 }
 
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function HistoryScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabsParamList>>();
   const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<HistoryFilterCategory>('all');
+
+  const historyQuery = useInfiniteQuery({
+    queryKey: ['transactions', 'history'],
+    queryFn: ({ pageParam }) => getTransactionHistoryApi({ page: pageParam, size: PAGE_SIZE }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => (lastPage.last ? undefined : lastPage.number + 1),
+  });
+
+  const loadedItems = useMemo(
+    () => historyQuery.data?.pages.flatMap((page) => page.content) ?? [],
+    [historyQuery.data],
+  );
 
   function comingSoon() {
     showToast('Tính năng sắp ra mắt', 'info');
@@ -59,34 +112,35 @@ export function HistoryScreen() {
 
   const filteredItems = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return mockHistoryTransactions.filter((item) => {
-      const matchCategory = activeCategory === 'all' || item.categories.includes(activeCategory);
-      const haystack = `${item.title} ${item.subtitle} ${formatCurrency(item.amount)}`.toLowerCase();
+    return loadedItems.filter((item) => {
+      const matchCategory = matchesCategory(item, activeCategory);
+      const haystack = `${getTransactionTypeLabel(item.type, item.direction)} ${item.description} ${formatCurrency(item.amount)}`.toLowerCase();
       const matchSearch = !term || haystack.includes(term);
       return matchCategory && matchSearch;
     });
-  }, [search, activeCategory]);
+  }, [loadedItems, search, activeCategory]);
 
   const groups = useMemo(() => groupByDate(filteredItems), [filteredItems]);
 
-  const weeklyInflow = useMemo(
-    () =>
-      mockHistoryTransactions
-        .filter((item) => item.direction === 'CREDIT' && item.status === 'COMPLETED')
-        .reduce((sum, item) => sum + item.amount, 0),
-    [],
-  );
-  const weeklyOutflow = useMemo(
-    () =>
-      mockHistoryTransactions
-        .filter((item) => item.direction === 'DEBIT' && item.status === 'COMPLETED')
-        .reduce((sum, item) => sum + item.amount, 0),
-    [],
-  );
+  // Không có API tổng hợp "dòng tiền tuần này" cho user (chỉ admin dashboard có aggregate) —
+  // tính best-effort trên dữ liệu ĐÃ TẢI, có thể thiếu nếu giao dịch trong tuần nằm ở trang
+  // chưa bấm "Tải thêm" tới.
+  const weeklyInflow = useMemo(() => {
+    const since = Date.now() - ONE_WEEK_MS;
+    return loadedItems
+      .filter((item) => item.direction === 'CREDIT' && item.status === 'COMPLETED' && new Date(item.createdAt).getTime() >= since)
+      .reduce((sum, item) => sum + item.amount, 0);
+  }, [loadedItems]);
+  const weeklyOutflow = useMemo(() => {
+    const since = Date.now() - ONE_WEEK_MS;
+    return loadedItems
+      .filter((item) => item.direction === 'DEBIT' && item.status === 'COMPLETED' && new Date(item.createdAt).getTime() >= since)
+      .reduce((sum, item) => sum + item.amount, 0);
+  }, [loadedItems]);
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <AppHeader title="Lịch Sử" avatarName="Nguyễn Văn An" onAvatarPress={() => navigation.navigate('HoSo')} />
+      <AppHeader title="Lịch Sử" avatarName={user?.fullName ?? ''} onAvatarPress={() => navigation.navigate('HoSo')} />
       <ScrollView className="flex-1 px-gutter-mobile" contentContainerStyle={{ paddingVertical: 16, gap: 16 }}>
         {/* Title row */}
         <View className="flex-row items-center justify-between">
@@ -109,7 +163,7 @@ export function HistoryScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Tìm kiếm theo tên người nhận, mã GD..."
+            placeholder="Tìm kiếm theo loại giao dịch, mã GD..."
             placeholderTextColor={colors.outline}
             className="h-12 rounded-md bg-surface-container-lowest text-on-surface font-body-md text-body-md"
             style={{ paddingLeft: 44, paddingRight: search ? 40 : 16 }}
@@ -162,7 +216,18 @@ export function HistoryScreen() {
         </View>
 
         {/* Grouped transaction list */}
-        {groups.length === 0 ? (
+        {historyQuery.isLoading ? (
+          <View className="items-center py-space-xl">
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : historyQuery.isError ? (
+          <Card>
+            <EmptyState icon="warning_circle" title="Không tải được lịch sử giao dịch" description="Vui lòng thử lại." />
+            <Pressable onPress={() => historyQuery.refetch()} className="mt-space-sm self-center">
+              <Text className="font-label-md text-label-md text-primary font-semibold">Thử lại</Text>
+            </Pressable>
+          </Card>
+        ) : groups.length === 0 ? (
           <Card>
             <EmptyState
               icon="receipt_long"
@@ -182,34 +247,56 @@ export function HistoryScreen() {
                 </Text>
               </View>
               <View className="bg-surface-container-lowest rounded-md overflow-hidden">
-                {group.items.map((item, index) => (
-                  <View key={item.id}>
-                    {index > 0 && <View className="h-px bg-surface-container mx-3.5" />}
-                    <TransactionListItem
-                      icon={item.icon}
-                      title={item.title}
-                      subtitle={`${item.subtitle} • ${formatTimeOfDay(item.createdAt)}`}
-                      amount={item.amount}
-                      direction={item.direction === 'CREDIT' ? 'in' : 'out'}
-                      pendingApproval={item.status === 'PENDING_REVIEW'}
-                      onPress={() =>
-                        rootNavigation?.navigate('TransactionDetail', {
-                          title: item.title,
-                          subtitle: item.subtitle,
-                          icon: item.icon,
-                          amount: item.amount,
-                          direction: item.direction === 'CREDIT' ? 'in' : 'out',
-                          status: mapTransactionStatusToBadge(item.status),
-                          createdAt: item.createdAt,
-                          transactionCode: item.transactionCode,
-                        })
-                      }
-                    />
-                  </View>
-                ))}
+                {group.items.map((item, index) => {
+                  const title = getTransactionTypeLabel(item.type, item.direction);
+                  const icon = getTransactionIcon(item.type, item.direction);
+                  const subtitle = `Mã GD: ${item.description}`;
+                  return (
+                    <View key={item.id}>
+                      {index > 0 && <View className="h-px bg-surface-container mx-3.5" />}
+                      <TransactionListItem
+                        icon={icon}
+                        title={title}
+                        subtitle={`${subtitle} • ${formatTimeOfDay(item.createdAt)}`}
+                        amount={item.amount}
+                        direction={item.direction === 'CREDIT' ? 'in' : 'out'}
+                        status={item.status}
+                        onPress={() =>
+                          rootNavigation?.navigate('TransactionDetail', {
+                            title,
+                            subtitle,
+                            icon,
+                            amount: item.amount,
+                            direction: item.direction === 'CREDIT' ? 'in' : 'out',
+                            status: mapTransactionStatusToBadge(item.status),
+                            createdAt: item.createdAt,
+                            transactionCode: item.description,
+                          })
+                        }
+                      />
+                    </View>
+                  );
+                })}
               </View>
             </View>
           ))
+        )}
+
+        {historyQuery.hasNextPage && (
+          <Pressable
+            onPress={() => historyQuery.fetchNextPage()}
+            disabled={historyQuery.isFetchingNextPage}
+            className="self-center flex-row items-center gap-space-xs px-5 py-2.5 rounded-md bg-surface-container-high mt-space-sm"
+          >
+            {historyQuery.isFetchingNextPage ? (
+              <ActivityIndicator color={colors.primary} size="small" />
+            ) : (
+              <Icon name="history" size={18} color={colors.primary} />
+            )}
+            <Text className="font-label-md text-label-md text-primary font-semibold">
+              {historyQuery.isFetchingNextPage ? 'Đang tải...' : 'Tải thêm giao dịch'}
+            </Text>
+          </Pressable>
         )}
 
         <Pressable

@@ -7,7 +7,9 @@ import { Button } from '../components/Button';
 import { Icon, IconName } from '../components/Icon';
 import { OtpEntryPanel } from '../components/OtpEntryPanel';
 import { StackHeader } from '../components/StackHeader';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { getApiErrorMessage } from '../api/apiError';
 import { colors } from '../theme/tokens';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -129,14 +131,21 @@ function StepWizard({ step }: { step: Step }) {
 
 export function ForgotPasswordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { forgotPassword, resetPassword } = useAuth();
   const { showToast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
 
-  // Step 1: định danh (SĐT/Email)
+  // Step 1: định danh (SĐT/Email) — UI cho nhập cả 2 theo đúng thiết kế gốc, nhưng backend
+  // thật (`ForgotPasswordRequest`/`AuthService.forgotPassword`) CHỈ tra theo email, không có
+  // tra cứu theo số điện thoại. Nhập số điện thoại hợp lệ vẫn bị chặn ở FE với thông báo rõ
+  // ràng, thay vì gửi API rồi luôn nhận "không có gì xảy ra" (forgotPassword no-op im lặng
+  // khi không tìm thấy user, vì lý do không lộ tài khoản nào tồn tại).
   const [identity, setIdentity] = useState('');
   const [showIdentityError, setShowIdentityError] = useState(false);
+  const [identityErrorMessage, setIdentityErrorMessage] = useState<string | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
   const identityCheck = useMemo(() => validateIdentity(identity), [identity]);
   const prefixIcon: IconName =
     identityCheck.valid && identityCheck.type === 'phone'
@@ -159,11 +168,18 @@ export function ForgotPasswordScreen() {
     return () => clearTimeout(timer);
   }, [step, secondsLeft]);
 
-  function handleResendOtp() {
+  async function handleResendOtp() {
     if (secondsLeft > 0) return;
-    setSecondsLeft(RESEND_SECONDS);
-    setOtp('');
-    showToast('Đã gửi lại mã OTP', 'success');
+    // Không có endpoint "resend" riêng cho quên mật khẩu — gọi lại chính forgotPassword(),
+    // backend tự sinh + gửi mã mới (có giới hạn tần suất qua otpService quota).
+    try {
+      await forgotPassword(identity.trim());
+      setSecondsLeft(RESEND_SECONDS);
+      setOtp('');
+      showToast('Đã gửi lại mã OTP', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Không gửi lại được mã OTP, vui lòng thử lại sau'), 'danger');
+    }
   }
 
   // Step 3: mật khẩu mới
@@ -176,25 +192,38 @@ export function ForgotPasswordScreen() {
     showToast('Tính năng sắp ra mắt', 'info');
   }
 
-  function handleSubmitIdentity() {
+  async function handleSubmitIdentity() {
     if (!identityCheck.valid) {
+      setIdentityErrorMessage('Vui lòng nhập đúng số điện thoại (10 số) hoặc địa chỉ email hợp lệ.');
+      setShowIdentityError(true);
+      return;
+    }
+    if (identityCheck.type !== 'email') {
+      setIdentityErrorMessage('Khôi phục mật khẩu hiện chỉ hỗ trợ email, chưa hỗ trợ số điện thoại.');
       setShowIdentityError(true);
       return;
     }
     setShowIdentityError(false);
     setIsSendingOtp(true);
-    setTimeout(() => {
-      setIsSendingOtp(false);
+    try {
+      await forgotPassword(identity.trim());
       setStep(2);
-    }, 900);
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Không gửi được mã OTP, vui lòng thử lại'), 'danger');
+    } finally {
+      setIsSendingOtp(false);
+    }
   }
 
   function handleConfirmOtp() {
-    // Demo: mọi mã 6 số đều được coi là hợp lệ (chưa nối API xác thực OTP thật).
+    // KHÔNG có endpoint "xác thực OTP" riêng cho quên mật khẩu — backend chỉ kiểm tra OTP
+    // GỘP CHUNG với bước đặt mật khẩu mới (POST /auth/reset-password {email, otp,
+    // new_password}). Bước này chỉ chuyển UI sang step 3 cục bộ; nếu OTP sai/hết hạn, lỗi
+    // thật chỉ lộ ra khi bấm "Đặt lại mật khẩu" ở step 3 (xem handleResetPassword bên dưới).
     setStep(3);
   }
 
-  function handleResetPassword() {
+  async function handleResetPassword() {
     if (!newPassword || !confirmPassword) {
       showToast('Vui lòng nhập đầy đủ mật khẩu mới', 'danger');
       return;
@@ -203,8 +232,21 @@ export function ForgotPasswordScreen() {
       showToast('Mật khẩu xác nhận không khớp', 'danger');
       return;
     }
-    showToast('Đặt lại mật khẩu thành công, vui lòng đăng nhập lại', 'success');
-    navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Login' }] }));
+
+    setIsResettingPassword(true);
+    try {
+      await resetPassword(identity.trim(), otp, newPassword);
+      showToast('Đặt lại mật khẩu thành công, vui lòng đăng nhập lại', 'success');
+      navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Login' }] }));
+    } catch (error) {
+      // OTP sai/hết hạn chỉ phát hiện được ở bước này (xem ghi chú handleConfirmOtp) — đưa
+      // người dùng quay lại step 2 để nhập lại mã, không chỉ hiện toast rồi đứng yên ở step 3.
+      showToast(getApiErrorMessage(error, 'Mã OTP không đúng hoặc đã hết hạn, vui lòng nhập lại'), 'danger');
+      setOtp('');
+      setStep(2);
+    } finally {
+      setIsResettingPassword(false);
+    }
   }
 
   const titleByStep: Record<Step, string> = {
@@ -299,11 +341,11 @@ export function ForgotPasswordScreen() {
                     </Pressable>
                   )}
                 </View>
-                {showIdentityError && (
+                {showIdentityError && identityErrorMessage && (
                   <View className="flex-row items-center gap-1 mt-0.5">
                     <Icon name="error" size={14} color={colors.error} />
                     <Text className="font-body-sm text-body-sm" style={{ color: colors.error }}>
-                      Vui lòng nhập đúng số điện thoại (10 số) hoặc địa chỉ email hợp lệ.
+                      {identityErrorMessage}
                     </Text>
                   </View>
                 )}
@@ -455,7 +497,7 @@ export function ForgotPasswordScreen() {
               )}
             </View>
 
-            <Button label="Đặt lại mật khẩu" onPress={handleResetPassword} />
+            <Button label="Đặt lại mật khẩu" onPress={handleResetPassword} loading={isResettingPassword} />
           </View>
         )}
       </ScrollView>

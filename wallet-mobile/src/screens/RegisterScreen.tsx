@@ -10,7 +10,9 @@ import { GoogleIcon } from '../components/GoogleIcon';
 import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
 import { Logo } from '../components/Logo';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { getApiErrorMessage } from '../api/apiError';
 import { colors } from '../theme/tokens';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -60,6 +62,7 @@ function RuleRow({ met, label }: { met: boolean; label: string }) {
 
 export function RegisterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { register } = useAuth();
   const { showToast } = useToast();
 
   const [fullName, setFullName] = useState('');
@@ -68,6 +71,7 @@ export function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const strength = useMemo(() => evaluatePassword(password), [password]);
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
@@ -76,7 +80,7 @@ export function RegisterScreen() {
     showToast('Tính năng sắp ra mắt', 'info');
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!fullName.trim() || !phone.trim() || !email.trim() || !password || !confirmPassword) {
       showToast('Vui lòng điền đầy đủ thông tin bắt buộc', 'danger');
       return;
@@ -89,7 +93,20 @@ export function RegisterScreen() {
       showToast('Vui lòng đồng ý Điều khoản sử dụng & Chính sách bảo mật', 'danger');
       return;
     }
-    navigation.navigate('RegisterOtp', { phone });
+
+    setSubmitting(true);
+    try {
+      const user = await register({ email: email.trim(), fullName: fullName.trim(), phoneNumber: phone.trim(), password });
+      // AuthService.register() đã cấp token thật (đăng nhập luôn) — nhưng ví vẫn
+      // PENDING_VERIFICATION tới khi xác thực OTP xong, nên vẫn điều hướng qua RegisterOtp
+      // thay vì thẳng vào Main. Mã OTP gửi qua EMAIL (emailOtpService.sendRegistrationOtp),
+      // KHÔNG PHẢI SMS dù copy màn RegisterOtp gốc ghi "số điện thoại" — đã sửa copy ở đó.
+      navigation.navigate('RegisterOtp', { userId: user.id, email: user.email });
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Đăng ký thất bại, vui lòng thử lại'), 'danger');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -227,12 +244,12 @@ export function RegisterScreen() {
             </Pressable>
           </View>
 
-          <Button label="Tạo tài khoản" onPress={handleSubmit} />
+          <Button label="Tạo tài khoản" onPress={handleSubmit} loading={submitting} />
 
           <View className="flex-row items-center gap-2 bg-surface-container-low p-2.5 rounded-md">
             <Icon name="verified_user" size={18} color={colors.primary} />
             <Text className="flex-1 font-label-caption text-label-caption text-on-surface-variant">
-              Sau khi bấm Tạo tài khoản, hệ thống sẽ gửi mã OTP 6 chữ số đến số điện thoại của bạn để kích hoạt ví.
+              Sau khi bấm Tạo tài khoản, hệ thống sẽ gửi mã OTP 6 chữ số đến email của bạn để kích hoạt ví.
             </Text>
           </View>
         </View>

@@ -7,6 +7,7 @@ import { LoginScreen } from '../screens/LoginScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
 import { RegisterOtpScreen } from '../screens/RegisterOtpScreen';
+import { MfaVerifyScreen } from '../screens/MfaVerifyScreen';
 import { TransferScreen } from '../screens/TransferScreen';
 import { DepositScreen } from '../screens/DepositScreen';
 import { WithdrawScreen } from '../screens/WithdrawScreen';
@@ -20,18 +21,14 @@ import { MainTabs } from './MainTabs';
 export type TransactionResultVariant = 'completed' | 'pending' | 'failed';
 export type TransactionKind = 'transfer' | 'deposit' | 'withdraw';
 
-export type TransferDraft = {
-  amount: number;
-  recipientName: string;
-  recipientWalletCode: string;
-  recipientWalletLabel: string;
-  note: string;
-};
-
 /**
  * Tham số chung cho màn Kết quả giao dịch, dùng cho cả 3 luồng (chuyển tiền/nạp/rút) —
  * đặt tên trung tính (counterparty/source) vì mỗi luồng có khái niệm "đối tác" khác nhau:
  * người nhận (transfer), nguồn tiền nạp (deposit), tài khoản nhận tiền (withdraw).
+ * `balanceAfter`/`transactionCode` optional — API thật không trả reference number hay số dư
+ * mới khi giao dịch thất bại trước khi tạo xong (lỗi ném ra ở tầng validate/fraud, không có
+ * `TransactionResponse` nào đi kèm response lỗi). `failureReason` là message lỗi THẬT từ
+ * backend (ApiErrorInfo.message), thay cho banner lý do cố định trước đây.
  */
 export type TransactionResultParams = {
   variant: TransactionResultVariant;
@@ -43,8 +40,9 @@ export type TransactionResultParams = {
   sourceLabel: string;
   sourceDetail: string;
   note?: string;
-  transactionCode: string;
-  balanceAfter: number;
+  transactionCode?: string;
+  balanceAfter?: number;
+  failureReason?: string;
 };
 
 /**
@@ -68,13 +66,20 @@ export type RootStackParamList = {
   Login: undefined;
   ForgotPassword: undefined;
   Register: undefined;
-  RegisterOtp: { phone: string };
+  RegisterOtp: { userId: string; email: string };
+  MfaVerify: { email: string };
   Main: undefined;
   ComponentShowcase: undefined;
   Transfer: undefined;
   Deposit: undefined;
   Withdraw: undefined;
-  OtpConfirm: TransferDraft;
+  /**
+   * OTP xác nhận giao dịch (rút tiền/chuyển tiền >= wallet.otp.required-amount) — cần
+   * `transactionId` THẬT trả về từ POST deposits/withdrawals/transfers khi status đã là
+   * PENDING_OTP_CONFIRMATION, để gọi đúng POST /transactions/{id}/confirm-otp. Không dùng
+   * TransferDraft nữa (không tái tạo được state trước khi có transaction thật).
+   */
+  OtpConfirm: { transactionId: string; kind: TransactionKind; amount: number };
   TransactionResult: TransactionResultParams;
   TransactionDetail: TransactionDetailParams;
   EditProfile: undefined;
@@ -91,6 +96,7 @@ export function RootNavigator() {
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
       <Stack.Screen name="RegisterOtp" component={RegisterOtpScreen} />
+      <Stack.Screen name="MfaVerify" component={MfaVerifyScreen} />
       <Stack.Screen name="Main" component={MainTabs} />
       <Stack.Screen name="ComponentShowcase" component={ComponentShowcaseScreen} />
       <Stack.Screen name="Transfer" component={TransferScreen} />

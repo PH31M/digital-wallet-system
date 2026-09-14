@@ -1,23 +1,23 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Icon } from '../components/Icon';
 import { StackHeader } from '../components/StackHeader';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
-import { mockWallet } from '../api/mock/homeMock';
-import { mockRecipient } from '../api/mock/transferMock';
-import { buildTransferResultParams, getAmountInWords } from '../utils/transferHelpers';
+import { getApiErrorMessage } from '../api/apiError';
+import { getCurrentUserWalletApi, lookupWalletApi, transferApi } from '../api/walletApi';
+import { WalletLookupResponse } from '../types/api';
+import { generateIdempotencyKey } from '../utils/idempotencyKey';
+import { getAmountInWords } from '../utils/transferHelpers';
 import { RootStackParamList } from '../navigation/RootNavigator';
-
-const OTP_REQUIRED_AMOUNT = 5_000_000; // khớp wallet.otp.required-amount (mặc định) bên backend
 
 const QUICK_AMOUNTS_ROW1 = [100_000, 200_000, 500_000];
 const QUICK_AMOUNTS_ROW2 = [1_000_000, 2_000_000];
-
-type ConfirmState = 'idle' | 'loading' | 'biometric';
 
 function StepBadge({ step }: { step: number }) {
   return (
@@ -29,20 +29,36 @@ function StepBadge({ step }: { step: number }) {
 
 export function TransferScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const walletQuery = useQuery({ queryKey: ['wallet', 'me'], queryFn: getCurrentUserWalletApi });
+  const balance = walletQuery.data?.balance ?? 0;
 
   const [recipientQuery, setRecipientQuery] = useState('');
-  const [recipient, setRecipient] = useState<typeof mockRecipient | null>(null);
+  const [recipient, setRecipient] = useState<WalletLookupResponse | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [amount, setAmount] = useState(1_200_000);
   const [note, setNote] = useState('');
-  const [confirmState, setConfirmState] = useState<ConfirmState>('idle');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [idempotencyKey] = useState(() => generateIdempotencyKey());
 
-  function handleSearch() {
-    if (!recipientQuery.trim()) {
-      showToast('Vui lòng nhập số ví / email / số điện thoại', 'danger');
+  async function handleSearch() {
+    const identifier = recipientQuery.trim();
+    if (!identifier) {
+      showToast('Vui lòng nhập email / số điện thoại người nhận', 'danger');
       return;
     }
-    setRecipient(mockRecipient);
+    setIsSearching(true);
+    try {
+      const found = await lookupWalletApi(identifier);
+      setRecipient(found);
+    } catch (error) {
+      setRecipient(null);
+      showToast(getApiErrorMessage(error, 'Không tìm thấy người nhận'), 'danger');
+    } finally {
+      setIsSearching(false);
+    }
   }
 
   function handleAmountChange(text: string) {
@@ -50,43 +66,65 @@ export function TransferScreen() {
     setAmount(digitsOnly ? parseInt(digitsOnly, 10) : 0);
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!recipient) {
-      showToast('Vui lòng chọn người nhận', 'danger');
+      showToast('Vui lòng tìm và chọn người nhận', 'danger');
       return;
     }
     if (amount <= 0) {
       showToast('Vui lòng nhập số tiền cần chuyển', 'danger');
       return;
     }
+    if (amount > balance) {
+      showToast('Số dư khả dụng không đủ', 'danger');
+      return;
+    }
 
-    setConfirmState('loading');
-    setTimeout(() => {
-      setConfirmState('biometric');
-      setTimeout(() => {
-        setConfirmState('idle');
-        const draft = {
-          amount,
-          recipientName: recipient.name,
-          recipientWalletCode: recipient.walletCode,
-          recipientWalletLabel: recipient.walletLabel,
-          note,
-        };
-        if (amount >= OTP_REQUIRED_AMOUNT) {
-          navigation.navigate('OtpConfirm', draft);
-        } else {
-          navigation.navigate(
-            'TransactionResult',
-            buildTransferResultParams(draft, 'completed', mockWallet.balance - amount),
-          );
-        }
-      }, 600);
-    }, 600);
+    setIsSubmitting(true);
+    try {
+      const transaction = await transferApi(recipient.walletId, amount, idempotencyKey);
+      queryClient.invalidateQueries({ queryKey: ['wallet', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'history'] });
+
+      if (transaction.status === 'PENDING_OTP_CONFIRMATION') {
+        navigation.navigate('OtpConfirm', { transactionId: transaction.id, kind: 'transfer', amount });
+        return;
+      }
+
+      navigation.navigate('TransactionResult', {
+        kind: 'transfer',
+        variant: transaction.status === 'COMPLETED' ? 'completed' : 'pending',
+        amount,
+        counterpartyLabel: 'Người nhận',
+        counterpartyName: recipient.maskedName,
+        counterpartyDetail: note || 'Chuyển tiền trong hệ thống PMPay',
+        sourceLabel: 'Nguồn tiền',
+        sourceDetail: 'Ví chính PMPay',
+        note,
+        transactionCode: transaction.referenceNumber,
+        balanceAfter: transaction.status === 'COMPLETED' ? balance - amount : undefined,
+      });
+    } catch (error) {
+      navigation.navigate('TransactionResult', {
+        kind: 'transfer',
+        variant: 'failed',
+        amount,
+        counterpartyLabel: 'Người nhận',
+        counterpartyName: recipient.maskedName,
+        counterpartyDetail: note || 'Chuyển tiền trong hệ thống PMPay',
+        sourceLabel: 'Nguồn tiền',
+        sourceDetail: 'Ví chính PMPay',
+        note,
+        failureReason: getApiErrorMessage(error, 'Chuyển tiền thất bại, vui lòng thử lại'),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <StackHeader title="Chuyển Tiền" onBack={() => navigation.goBack()} avatarName="Nguyễn Văn An" />
+      <StackHeader title="Chuyển Tiền" onBack={() => navigation.goBack()} avatarName={user?.fullName ?? ''} />
       <ScrollView className="flex-1 px-gutter-mobile" contentContainerStyle={{ paddingVertical: 16, gap: 16 }}>
         {/* Transfer mode tabs */}
         <View className="flex-row p-1 bg-surface-container rounded-md">
@@ -118,7 +156,7 @@ export function TransferScreen() {
                   <Icon name="verified" size={16} color={colors.secondary} />
                 </View>
                 <Text className="font-body-sm text-body-sm text-on-surface-variant">
-                  Số dư khả dụng: <Text className="font-semibold text-primary">{mockWallet.balance.toLocaleString('vi-VN')} đ</Text>
+                  Số dư khả dụng: <Text className="font-semibold text-primary">{balance.toLocaleString('vi-VN')} đ</Text>
                 </Text>
               </View>
             </View>
@@ -153,26 +191,41 @@ export function TransferScreen() {
               </View>
               <TextInput
                 value={recipientQuery}
-                onChangeText={setRecipientQuery}
-                placeholder="Số ví / Email / SĐT người nhận"
+                onChangeText={(text) => {
+                  setRecipientQuery(text);
+                  setRecipient(null);
+                }}
+                placeholder="Email / SĐT người nhận"
                 placeholderTextColor={colors.outline}
+                autoCapitalize="none"
                 className="h-12 rounded-md bg-surface-container-low text-on-surface font-body-md text-body-md"
                 style={{ paddingLeft: 40, paddingRight: 12 }}
               />
             </View>
-            <Pressable onPress={handleSearch} className="h-9 px-3.5 rounded bg-primary-container flex-row items-center gap-1">
-              <Text className="font-label-md text-label-md text-on-primary font-semibold">Tìm</Text>
-              <Icon name="arrow_forward" size={16} color={colors.onPrimary} />
+            <Pressable
+              onPress={handleSearch}
+              disabled={isSearching}
+              className="h-9 px-3.5 rounded bg-primary-container flex-row items-center gap-1"
+              style={{ opacity: isSearching ? 0.7 : 1 }}
+            >
+              <Text className="font-label-md text-label-md text-on-primary font-semibold">
+                {isSearching ? 'Đang tìm...' : 'Tìm'}
+              </Text>
+              {!isSearching && <Icon name="arrow_forward" size={16} color={colors.onPrimary} />}
             </Pressable>
           </View>
 
+          {/* Tra cứu THẬT qua GET /wallets/lookup — không còn tìm theo "số ví" (mã ví không
+              phải định danh tra cứu được, chỉ email/SĐT match đúng User.email/phoneNumber
+              trong DB). Tên hiện ra đã bị che 1 phần (maskedName) — backend không trả tên đầy
+              đủ/email/SĐT của người khác, đúng thiết kế bảo mật. */}
           {recipient && (
             <View className="rounded-md p-3.5 flex-row items-center justify-between" style={{ backgroundColor: 'rgba(242,243,255,0.8)' }}>
               <View className="flex-row items-center gap-3 flex-1 min-w-0">
                 <View>
                   <View className="w-12 h-12 rounded-full bg-primary-fixed items-center justify-center">
                     <Text className="font-headline-sm text-headline-sm text-on-primary-fixed font-bold">
-                      {recipient.initials}
+                      {recipient.maskedName.trim().charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-secondary rounded-full items-center justify-center">
@@ -181,10 +234,10 @@ export function TransferScreen() {
                 </View>
                 <View className="shrink">
                   <Text numberOfLines={1} className="font-headline-sm text-headline-sm text-on-surface font-bold">
-                    {recipient.name}
+                    {recipient.maskedName}
                   </Text>
                   <Text numberOfLines={1} className="font-body-sm text-body-sm text-on-surface-variant">
-                    {recipient.walletCode} • {recipient.walletLabel}
+                    {recipient.status === 'ACTIVE' ? 'Ví đang hoạt động' : recipient.status}
                   </Text>
                 </View>
               </View>
@@ -306,25 +359,14 @@ export function TransferScreen() {
         {/* Submit */}
         <Pressable
           onPress={handleConfirm}
-          disabled={confirmState !== 'idle'}
+          disabled={isSubmitting}
           className="h-12 rounded-md bg-primary items-center justify-center flex-row gap-2"
-          style={{ opacity: confirmState !== 'idle' ? 0.8 : 1 }}
+          style={{ opacity: isSubmitting ? 0.8 : 1 }}
         >
-          {confirmState === 'idle' && (
-            <>
-              <Text className="font-headline-sm text-headline-sm text-on-primary font-bold">Xác nhận chuyển tiền</Text>
-              <Icon name="check_circle" size={20} color={colors.onPrimary} />
-            </>
-          )}
-          {confirmState === 'loading' && (
-            <Text className="font-headline-sm text-headline-sm text-on-primary font-bold">Đang chuẩn bị xác thực...</Text>
-          )}
-          {confirmState === 'biometric' && (
-            <>
-              <Icon name="fingerprint" size={20} color={colors.onPrimary} />
-              <Text className="font-headline-sm text-headline-sm text-on-primary font-bold">Xác thực vân tay / FaceID</Text>
-            </>
-          )}
+          <Text className="font-headline-sm text-headline-sm text-on-primary font-bold">
+            {isSubmitting ? 'Đang xử lý...' : 'Xác nhận chuyển tiền'}
+          </Text>
+          {!isSubmitting && <Icon name="check_circle" size={20} color={colors.onPrimary} />}
         </Pressable>
       </ScrollView>
     </SafeAreaView>

@@ -8,6 +8,7 @@ import { AppHeader } from '../components/AppHeader';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
 import { SettingsMenuRow } from '../components/SettingsMenuRow';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
 import { mockUserProfile } from '../api/mock/homeMock';
@@ -25,9 +26,11 @@ function SectionTitle({ children }: { children: string }) {
 export function ProfileScreen() {
   const navigation = useNavigation();
   const rootNavigation = navigation.getParent<NativeStackNavigationProp<RootStackParamList>>();
+  const { logout } = useAuth();
   const { showToast } = useToast();
 
   const [isBiometricEnabled, setIsBiometricEnabled] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   function comingSoon() {
     showToast('Tính năng sắp ra mắt', 'info');
@@ -38,19 +41,25 @@ export function ProfileScreen() {
     showToast('Đã sao chép mã ví', 'success');
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    // logout() tự dọn token/state cục bộ kể cả khi request POST /auth/logout thất bại (mất
+    // mạng...) — xem AuthContext.tsx, nên luôn điều hướng về Login sau khi resolve.
+    await logout();
+    setIsLoggingOut(false);
     rootNavigation?.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Login' }] }));
   }
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <AppHeader title="Hồ Sơ Cá Nhân" avatarName={mockUserProfile.full_name} />
+      <AppHeader title="Hồ Sơ Cá Nhân" avatarName={mockUserProfile.fullName} />
       <ScrollView className="flex-1 px-gutter-mobile" contentContainerStyle={{ paddingVertical: 16, gap: 16 }}>
         {/* Profile summary */}
         <View className="bg-surface-container-lowest rounded-lg p-space-md">
           <View className="flex-row items-start gap-space-md">
             <View style={{ position: 'relative' }}>
-              <Avatar name={mockUserProfile.full_name} size={64} />
+              <Avatar name={mockUserProfile.fullName} size={64} />
               <View
                 className="w-6 h-6 rounded-full bg-secondary items-center justify-center"
                 style={{ position: 'absolute', bottom: -4, right: -4 }}
@@ -61,7 +70,7 @@ export function ProfileScreen() {
             <View className="flex-1 min-w-0">
               <View className="flex-row items-center gap-space-xs flex-wrap">
                 <Text className="font-headline-md text-headline-md text-primary font-bold">
-                  {mockUserProfile.full_name}
+                  {mockUserProfile.fullName}
                 </Text>
                 <View className="flex-row items-center gap-1 bg-surface-container-high px-2 py-0.5 rounded-full">
                   <Icon name="workspace_premium" size={13} color={colors.surfaceTint} />

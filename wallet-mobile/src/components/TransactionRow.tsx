@@ -11,10 +11,22 @@ type TransactionRowProps = {
   amount: number;
   direction: 'in' | 'out';
   status?: StatusBadgeStatus;
+  /** Label riêng cho từng trạng thái thật (vd "Chờ duyệt" khác "Chờ xác thực OTP") — xem
+   * `mapTransactionStatusToLabel`. Không truyền thì StatusBadge dùng label mặc định theo tông. */
+  statusLabel?: string;
   onPress?: () => void;
 };
 
-export function TransactionRow({ icon, title, subtitle, amount, direction, status = 'success', onPress }: TransactionRowProps) {
+export function TransactionRow({
+  icon,
+  title,
+  subtitle,
+  amount,
+  direction,
+  status = 'success',
+  statusLabel,
+  onPress,
+}: TransactionRowProps) {
   const isFailed = status === 'danger';
   const amountClassName = isFailed ? 'text-danger' : direction === 'in' ? 'text-secondary' : 'text-on-surface';
   const sign = direction === 'in' ? '+' : '-';
@@ -47,7 +59,7 @@ export function TransactionRow({ icon, title, subtitle, amount, direction, statu
           {formatCurrency(amount)}
         </Text>
         <View className="mt-space-xs">
-          <StatusBadge status={status} />
+          <StatusBadge status={status} label={statusLabel} />
         </View>
       </View>
     </Pressable>

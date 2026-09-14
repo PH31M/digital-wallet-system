@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,15 +11,21 @@ import { AppHeader } from '../components/AppHeader';
 import { Card } from '../components/Card';
 import { EmptyState } from '../components/EmptyState';
 import { Icon } from '../components/Icon';
+import { LoadingSkeleton } from '../components/LoadingSkeleton';
 import { TransactionRow } from '../components/TransactionRow';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
-import { mockRecentTransactions, mockUserProfile, mockWallet } from '../api/mock/homeMock';
+import { getCurrentUserWalletApi, getTransactionHistoryApi } from '../api/walletApi';
+import { getUnreadNotificationCountApi } from '../api/notificationApi';
 import { formatRelativeTime } from '../utils/formatRelativeTime';
 import { maskWalletId } from '../utils/formatWalletId';
-import { mapTransactionStatusToBadge } from '../utils/mapTransactionStatus';
+import { mapTransactionStatusToBadge, mapTransactionStatusToLabel } from '../utils/mapTransactionStatus';
+import { getTransactionIcon, getTransactionTypeLabel } from '../utils/transactionDisplay';
 import { MainTabsParamList } from '../navigation/MainTabs';
 import { RootStackParamList } from '../navigation/RootNavigator';
+
+const RECENT_TRANSACTIONS_SIZE = 5;
 
 type QuickAction = {
   label: string;
@@ -28,12 +35,27 @@ type QuickAction = {
 
 export function HomeScreen() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabsParamList>>();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [isBalanceHidden, setIsBalanceHidden] = useState(false);
   const [justCopied, setJustCopied] = useState(false);
 
+  const walletQuery = useQuery({ queryKey: ['wallet', 'me'], queryFn: getCurrentUserWalletApi });
+  const recentTransactionsQuery = useQuery({
+    queryKey: ['transactions', 'history', 'recent'],
+    queryFn: () => getTransactionHistoryApi({ size: RECENT_TRANSACTIONS_SIZE }),
+  });
+  const unreadCountQuery = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: getUnreadNotificationCountApi,
+  });
+  const hasUnreadNotifications = (unreadCountQuery.data ?? 0) > 0;
+  const wallet = walletQuery.data;
+  const recentTransactions = recentTransactionsQuery.data?.content ?? [];
+
   async function handleCopyWalletId() {
-    await Clipboard.setStringAsync(maskWalletId(mockWallet.id).replace('•••• ', ''));
+    if (!wallet) return;
+    await Clipboard.setStringAsync(wallet.id);
     setJustCopied(true);
     setTimeout(() => setJustCopied(false), 1500);
   }
@@ -55,7 +77,7 @@ export function HomeScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <AppHeader
         title="Trang Chủ"
-        avatarName={mockUserProfile.full_name}
+        avatarName={user?.fullName ?? ''}
         onAvatarPress={() => navigation.navigate('HoSo')}
       />
       <ScrollView className="flex-1 px-gutter-mobile" contentContainerStyle={{ paddingVertical: 16, gap: 24 }}>
@@ -64,9 +86,9 @@ export function HomeScreen() {
           <View className="shrink">
             <View className="flex-row items-center gap-space-xs">
               <Text numberOfLines={1} className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                Xin chào, {mockUserProfile.full_name}
+                Xin chào, {user?.fullName}
               </Text>
-              {mockUserProfile.is_verified && <Icon name="verified_user" size={18} color={colors.secondary} />}
+              {user?.isVerified && <Icon name="verified_user" size={18} color={colors.secondary} />}
             </View>
             <Text className="font-label-caption text-label-caption text-outline uppercase tracking-wider">
               Tài khoản chuẩn eKYC
@@ -77,7 +99,9 @@ export function HomeScreen() {
             className="w-11 h-11 items-center justify-center rounded-full bg-surface-container-low"
           >
             <Icon name="notifications" size={22} color={colors.onSurfaceVariant} />
-            <View className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-error" />
+            {hasUnreadNotifications && (
+              <View className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-error" />
+            )}
           </Pressable>
         </View>
 
@@ -120,14 +144,21 @@ export function HomeScreen() {
           </View>
 
           <View className="my-space-xs">
-            {isBalanceHidden ? (
+            {walletQuery.isLoading ? (
+              <LoadingSkeleton width={160} height={36} radius={6} />
+            ) : walletQuery.isError ? (
+              <Pressable onPress={() => walletQuery.refetch()} className="flex-row items-center gap-1.5">
+                <Icon name="warning_circle" size={18} color={colors.onPrimary} />
+                <Text className="font-body-sm text-body-sm text-on-primary">Không tải được số dư — chạm để thử lại</Text>
+              </Pressable>
+            ) : isBalanceHidden ? (
               <Text className="font-headline-xl text-headline-xl font-bold tracking-tight text-on-primary">
                 ••••••••••
               </Text>
             ) : (
               <View className="flex-row items-baseline gap-space-xs">
                 <Text className="font-headline-xl text-headline-xl font-bold tracking-tight text-on-primary">
-                  {mockWallet.balance.toLocaleString('vi-VN')}
+                  {wallet?.balance.toLocaleString('vi-VN')}
                 </Text>
                 <Text className="font-headline-md text-headline-md text-on-primary-container font-semibold">₫</Text>
               </View>
@@ -137,12 +168,20 @@ export function HomeScreen() {
           <View className="flex-row items-center justify-between pt-space-xs">
             <View className="flex-row items-center gap-space-xs">
               <Text className="font-label-caption text-label-caption text-on-primary-container">Số ví:</Text>
-              <Text className="font-numeric-ledger text-numeric-ledger text-surface-container-lowest tracking-wider font-semibold">
-                {maskWalletId(mockWallet.id)}
-              </Text>
-              <Pressable onPress={handleCopyWalletId} className="w-7 h-7 items-center justify-center rounded">
-                <Icon name={justCopied ? 'check_circle' : 'content_copy'} size={16} color={colors.onPrimaryContainer} />
-              </Pressable>
+              {wallet ? (
+                <>
+                  <Text className="font-numeric-ledger text-numeric-ledger text-surface-container-lowest tracking-wider font-semibold">
+                    {maskWalletId(wallet.id)}
+                  </Text>
+                  <Pressable onPress={handleCopyWalletId} className="w-7 h-7 items-center justify-center rounded">
+                    <Icon name={justCopied ? 'check_circle' : 'content_copy'} size={16} color={colors.onPrimaryContainer} />
+                  </Pressable>
+                </>
+              ) : (
+                <Text className="font-numeric-ledger text-numeric-ledger text-surface-container-lowest tracking-wider font-semibold">
+                  ••••
+                </Text>
+              )}
             </View>
             <Text className="font-label-caption text-label-caption text-secondary-fixed font-semibold tracking-wide uppercase">
               Hạng Bạch Kim
@@ -187,35 +226,61 @@ export function HomeScreen() {
             </Pressable>
           </View>
 
-          {mockRecentTransactions.length === 0 ? (
+          {recentTransactionsQuery.isLoading ? (
+            <View className="gap-space-xs">
+              {[1, 2, 3].map((i) => (
+                <LoadingSkeleton key={i} height={68} radius={12} />
+              ))}
+            </View>
+          ) : recentTransactionsQuery.isError ? (
+            <Card>
+              <EmptyState
+                icon="warning_circle"
+                title="Không tải được giao dịch"
+                description="Vui lòng thử lại."
+              />
+              <Pressable onPress={() => recentTransactionsQuery.refetch()} className="mt-space-sm self-center">
+                <Text className="font-label-md text-label-md text-primary font-semibold">Thử lại</Text>
+              </Pressable>
+            </Card>
+          ) : recentTransactions.length === 0 ? (
             <Card>
               <EmptyState icon="history" title="Chưa có giao dịch nào" />
             </Card>
           ) : (
             <View className="gap-space-xs">
-              {mockRecentTransactions.map((tx) => (
-                <TransactionRow
-                  key={tx.id}
-                  icon={tx.icon}
-                  title={tx.counterpartyName}
-                  subtitle={`${tx.description} • ${formatRelativeTime(tx.createdAt)}`}
-                  amount={tx.amount}
-                  direction={tx.direction === 'CREDIT' ? 'in' : 'out'}
-                  status={mapTransactionStatusToBadge(tx.status)}
-                  onPress={() =>
-                    rootNavigation?.navigate('TransactionDetail', {
-                      title: tx.counterpartyName,
-                      subtitle: tx.description,
-                      icon: tx.icon,
-                      amount: tx.amount,
-                      direction: tx.direction === 'CREDIT' ? 'in' : 'out',
-                      status: mapTransactionStatusToBadge(tx.status),
-                      createdAt: tx.createdAt,
-                      transactionCode: tx.transactionCode,
-                    })
-                  }
-                />
-              ))}
+              {recentTransactions.map((tx) => {
+                const title = getTransactionTypeLabel(tx.type, tx.direction);
+                const icon = getTransactionIcon(tx.type, tx.direction);
+                // `tx.description` thực chất là reference number của giao dịch (backend gán
+                // nhầm tên field — xem docs/api-endpoints-thuc-te-tren-dev-14-09.md mục 2),
+                // dùng làm mã GD hiển thị, không phải mô tả tự do.
+                const subtitle = `Mã GD: ${tx.description}`;
+                return (
+                  <TransactionRow
+                    key={tx.id}
+                    icon={icon}
+                    title={title}
+                    subtitle={`${subtitle} • ${formatRelativeTime(tx.createdAt)}`}
+                    amount={tx.amount}
+                    direction={tx.direction === 'CREDIT' ? 'in' : 'out'}
+                    status={mapTransactionStatusToBadge(tx.status)}
+                    statusLabel={mapTransactionStatusToLabel(tx.status)}
+                    onPress={() =>
+                      rootNavigation?.navigate('TransactionDetail', {
+                        title,
+                        subtitle,
+                        icon,
+                        amount: tx.amount,
+                        direction: tx.direction === 'CREDIT' ? 'in' : 'out',
+                        status: mapTransactionStatusToBadge(tx.status),
+                        createdAt: tx.createdAt,
+                        transactionCode: tx.description,
+                      })
+                    }
+                  />
+                );
+              })}
             </View>
           )}
         </View>
