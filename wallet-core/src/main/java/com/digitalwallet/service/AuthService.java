@@ -110,7 +110,7 @@ public class AuthService {
 
         return new AuthResponse(accessToken, refreshToken,
                 new UserProfileResponse(savedUser.getId(), savedUser.getEmail(), savedUser.getFullName(),
-                        savedUser.getEmailVerifiedAt() != null));
+                        savedUser.getPhoneNumber(), savedUser.getEmailVerifiedAt() != null));
     }
 
     @Transactional
@@ -144,7 +144,7 @@ public class AuthService {
 
         return new AuthResponse(accessToken, newRefreshToken,
                 new UserProfileResponse(user.getId(), user.getEmail(), user.getFullName(),
-                        user.getEmailVerifiedAt() != null));
+                        user.getPhoneNumber(), user.getEmailVerifiedAt() != null));
     }
 
     public void logout(String refreshToken, HttpServletRequest httpRequest) {
@@ -197,7 +197,7 @@ public class AuthService {
                     "USER", savedUser.getId(), clientIp(httpRequest), httpRequest.getHeader("User-Agent"), requestId);
             return new AuthResponse(null, null,
                     new UserProfileResponse(savedUser.getId(), savedUser.getEmail(), savedUser.getFullName(),
-                            savedUser.getEmailVerifiedAt() != null),
+                            savedUser.getPhoneNumber(), savedUser.getEmailVerifiedAt() != null),
                     true);
         }
 
@@ -210,7 +210,7 @@ public class AuthService {
 
         return new AuthResponse(accessToken, refreshToken,
                 new UserProfileResponse(savedUser.getId(), savedUser.getEmail(), savedUser.getFullName(),
-                        savedUser.getEmailVerifiedAt() != null));
+                        savedUser.getPhoneNumber(), savedUser.getEmailVerifiedAt() != null));
     }
 
     @Transactional
@@ -239,7 +239,7 @@ public class AuthService {
 
         return new AuthResponse(accessToken, refreshToken,
                 new UserProfileResponse(user.getId(), user.getEmail(), user.getFullName(),
-                        user.getEmailVerifiedAt() != null));
+                        user.getPhoneNumber(), user.getEmailVerifiedAt() != null));
     }
 
     public void forgotPassword(ForgotPasswordRequest request, HttpServletRequest httpRequest, UUID requestId) {

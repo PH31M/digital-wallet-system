@@ -97,7 +97,7 @@ class AuthControllerTest {
                 }
                 """;
         AuthResponse response = new AuthResponse("access-token", "refresh-token",
-                new UserProfileResponse(UUID.randomUUID(), "test@example.com", "Nguyen Van A", false));
+                new UserProfileResponse(UUID.randomUUID(), "test@example.com", "Nguyen Van A", null, false));
 
         when(authService.login(any(), any(), any())).thenReturn(response);
 

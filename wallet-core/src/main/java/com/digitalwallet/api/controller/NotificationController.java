@@ -1,6 +1,7 @@
 package com.digitalwallet.api.controller;
 
 import com.digitalwallet.api.dto.response.NotificationResponse;
+import com.digitalwallet.api.dto.response.PageResponse;
 import com.digitalwallet.common.request.RequestIds;
 import com.digitalwallet.common.response.ApiResponse;
 import com.digitalwallet.domain.entity.Notification;
@@ -33,7 +34,7 @@ public class NotificationController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<Page<NotificationResponse>>> getNotifications(
+    public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getNotifications(
             @CurrentUser User currentUser,
             Pageable pageable,
             @RequestParam(name = "unreadOnly", defaultValue = "false") boolean unreadOnly,
@@ -42,7 +43,8 @@ public class NotificationController {
         Page<NotificationResponse> notifications = notificationService
                 .getUserNotifications(currentUser, pageable, unreadOnly)
                 .map(NotificationResponse::from);
-        return ResponseEntity.ok(ApiResponse.success(requestId.toString(), Instant.now(), notifications));
+        return ResponseEntity.ok(ApiResponse.success(
+                requestId.toString(), Instant.now(), PageResponse.from(notifications)));
     }
 
     @GetMapping("/unread-count")
