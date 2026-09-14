@@ -126,6 +126,29 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!--
+              Dùng 1 lần khi Postgres dev local bị lệch checksum Flyway (migration file trên
+              đĩa đổi khác với checksum đã lưu trong flyway_schema_history) — chạy:
+              mvn flyway:repair -Dflyway.url=... -Dflyway.user=... -Dflyway.password=...
+              (lấy URL/user/password từ .env). "repair" chỉ cập nhật lại checksum đã lưu cho
+              khớp file hiện tại, KHÔNG xoá dữ liệu/bảng nào.
+            -->
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <configuration>
+                    <locations>
+                        <location>filesystem:src/main/resources/db/migration</location>
+                    </locations>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.flywaydb</groupId>
+                        <artifactId>flyway-database-postgresql</artifactId>
+                        <version>10.10.0</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
         </plugins>
     </build>
 </project>
