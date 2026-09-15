@@ -1,6 +1,7 @@
 package com.digitalwallet.service;
 
 import com.digitalwallet.api.dto.request.RegisterRequest;
+import com.digitalwallet.api.dto.request.GoogleLoginRequest;
 import com.digitalwallet.api.dto.request.LoginRequest;
 import com.digitalwallet.api.dto.request.RefreshTokenRequest;
 import com.digitalwallet.api.dto.request.ResendVerificationRequest;
@@ -35,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,6 +68,9 @@ class AuthServiceTest {
 
     @Mock
     private OtpService otpService;
+
+    @Mock
+    private GoogleTokenVerifierService googleTokenVerifierService;
 
     @Mock
     private HttpServletRequest httpRequest;
@@ -323,6 +328,75 @@ class AuthServiceTest {
         assertThat(user.getFailedLoginAttempts()).isEqualTo(5);
         verify(passwordEncoder, never()).matches(any(), any());
         verify(auditService, never()).log(any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void loginWithGoogle_newEmail_autoRegistersVerifiedAndActivatesWallet() {
+        AuthService authService = authService();
+        GoogleLoginRequest request = new GoogleLoginRequest("valid-id-token");
+
+        when(googleTokenVerifierService.verify("valid-id-token"))
+                .thenReturn(Optional.of(new GoogleTokenVerifierService.GooglePayload(
+                        "new-google-user@example.com", "Nguyen Van A", "google-sub-123")));
+        when(userRepository.findByEmail("new-google-user@example.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(any())).thenReturn("$2a$12$unusableRandomHash");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            if (user.getId() == null) {
+                user.setId(UUID.randomUUID());
+            }
+            return user;
+        });
+        when(jwtTokenProvider.generateAccessToken(any(User.class))).thenReturn("access-token");
+        when(jwtTokenProvider.generateRefreshToken(any(User.class))).thenReturn("refresh-token");
+
+        AuthResponse response = authService.loginWithGoogle(request, httpRequest, UUID.randomUUID());
+
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        assertThat(response.getUser().getEmail()).isEqualTo("new-google-user@example.com");
+        assertThat(response.getUser().isVerified()).isTrue();
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository, org.mockito.Mockito.atLeastOnce()).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getEmailVerifiedAt()).isNotNull();
+
+        ArgumentCaptor<Wallet> walletCaptor = ArgumentCaptor.forClass(Wallet.class);
+        verify(walletRepository).save(walletCaptor.capture());
+        assertThat(walletCaptor.getValue().getStatus()).isEqualTo(WalletStatus.ACTIVE);
+    }
+
+    @Test
+    void loginWithGoogle_existingEmail_logsIntoSameAccountWithoutDuplicating() {
+        AuthService authService = authService();
+        GoogleLoginRequest request = new GoogleLoginRequest("valid-id-token");
+        User existing = user("already-registered@example.com", "Nguyen Van A", "bcrypt-hash");
+
+        when(googleTokenVerifierService.verify("valid-id-token"))
+                .thenReturn(Optional.of(new GoogleTokenVerifierService.GooglePayload(
+                        "already-registered@example.com", "Nguyen Van A", "google-sub-123")));
+        when(userRepository.findByEmail("already-registered@example.com")).thenReturn(Optional.of(existing));
+        when(userRepository.save(existing)).thenReturn(existing);
+        when(jwtTokenProvider.generateAccessToken(existing)).thenReturn("access-token");
+        when(jwtTokenProvider.generateRefreshToken(existing)).thenReturn("refresh-token");
+
+        AuthResponse response = authService.loginWithGoogle(request, httpRequest, UUID.randomUUID());
+
+        assertThat(response.getUser().getEmail()).isEqualTo("already-registered@example.com");
+        verify(userRepository, never()).save(argThat(u -> u != existing));
+    }
+
+    @Test
+    void loginWithGoogle_invalidToken_throwsInvalidGoogleToken() {
+        AuthService authService = authService();
+        GoogleLoginRequest request = new GoogleLoginRequest("tampered-token");
+
+        when(googleTokenVerifierService.verify("tampered-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.loginWithGoogle(request, httpRequest, UUID.randomUUID()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_GOOGLE_TOKEN);
+        verify(userRepository, never()).findByEmail(any());
     }
 
     @Test
@@ -660,7 +734,7 @@ class AuthServiceTest {
 
     private AuthService authService() {
         return new AuthService(userRepository, walletRepository, passwordEncoder, jwtTokenProvider,
-                tokenBlacklistService, auditService, emailOtpService, otpService);
+                tokenBlacklistService, auditService, emailOtpService, otpService, googleTokenVerifierService);
     }
 
     private User user(String email, String fullName, String passwordHash) {

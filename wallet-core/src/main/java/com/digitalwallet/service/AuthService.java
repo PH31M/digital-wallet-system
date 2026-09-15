@@ -1,6 +1,7 @@
 package com.digitalwallet.service;
 
 import com.digitalwallet.api.dto.request.ForgotPasswordRequest;
+import com.digitalwallet.api.dto.request.GoogleLoginRequest;
 import com.digitalwallet.api.dto.request.LoginRequest;
 import com.digitalwallet.api.dto.request.RefreshTokenRequest;
 import com.digitalwallet.api.dto.request.RegisterRequest;
@@ -50,20 +51,23 @@ public class AuthService {
     private final AuditService auditService;
     private final EmailOtpService emailOtpService;
     private final OtpService otpService;
+    private final GoogleTokenVerifierService googleTokenVerifierService;
 
     public AuthService(UserRepository userRepository, WalletRepository walletRepository,
             PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider,
             TokenBlacklistService tokenBlacklistService, AuditService auditService,
-            EmailOtpService emailOtpService, OtpService otpService) {
+            EmailOtpService emailOtpService, OtpService otpService,
+            GoogleTokenVerifierService googleTokenVerifierService) {
         this(userRepository, null, walletRepository, passwordEncoder, jwtTokenProvider,
-                tokenBlacklistService, auditService, emailOtpService, otpService);
+                tokenBlacklistService, auditService, emailOtpService, otpService, googleTokenVerifierService);
     }
 
     @Autowired
     public AuthService(UserRepository userRepository, UserSessionRepository userSessionRepository,
             WalletRepository walletRepository, PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider, TokenBlacklistService tokenBlacklistService,
-            AuditService auditService, EmailOtpService emailOtpService, OtpService otpService) {
+            AuditService auditService, EmailOtpService emailOtpService, OtpService otpService,
+            GoogleTokenVerifierService googleTokenVerifierService) {
         this.userRepository = userRepository;
         this.userSessionRepository = userSessionRepository;
         this.walletRepository = walletRepository;
@@ -73,6 +77,7 @@ public class AuthService {
         this.auditService = auditService;
         this.emailOtpService = emailOtpService;
         this.otpService = otpService;
+        this.googleTokenVerifierService = googleTokenVerifierService;
     }
 
     @Transactional
@@ -211,6 +216,80 @@ public class AuthService {
         return new AuthResponse(accessToken, refreshToken,
                 new UserProfileResponse(savedUser.getId(), savedUser.getEmail(), savedUser.getFullName(),
                         savedUser.getPhoneNumber(), savedUser.getEmailVerifiedAt() != null));
+    }
+
+    /**
+     * Đăng nhập/đăng ký bằng Google Sign-In — mobile client tự lấy id_token từ Google (qua
+     * expo-auth-session), backend chỉ verify token rồi map sang tài khoản thật. Khớp email đã
+     * đăng ký bằng mật khẩu trước đó thì đăng nhập luôn vào ĐÚNG tài khoản đó (không tạo tài
+     * khoản trùng) — an toàn vì Google đã tự xác thực quyền sở hữu email
+     * (`email_verified=true`, xem GoogleTokenVerifierService), tương đương mức tin cậy với OTP
+     * email của chính hệ thống. Tài khoản mới tạo qua Google được coi là đã xác thực email và
+     * kích hoạt ví ngay — không qua bước OTP đăng ký (Google đã làm việc đó rồi), và có
+     * password_hash ngẫu nhiên không dùng được (cột này NOT NULL) để "đăng nhập bằng mật khẩu"
+     * tự nhiên bị từ chối cho tới khi họ tự đặt mật khẩu qua forgot-password.
+     */
+    @Transactional
+    public AuthResponse loginWithGoogle(GoogleLoginRequest request, HttpServletRequest httpRequest, UUID requestId) {
+        GoogleTokenVerifierService.GooglePayload payload = googleTokenVerifierService.verify(request.getIdToken())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_GOOGLE_TOKEN));
+
+        String normalizedEmail = payload.email().trim().toLowerCase();
+        User user = userRepository.findByEmail(normalizedEmail).orElseGet(() -> registerFromGoogle(normalizedEmail, payload));
+
+        if (user.isCurrentlyLocked()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_LOCKED);
+        }
+
+        user.recordSuccessfulLogin();
+        User savedUser = userRepository.save(user);
+
+        if (Boolean.TRUE.equals(savedUser.getMfaEnabled())) {
+            emailOtpService.sendMfaOtp(savedUser);
+            auditService.log(savedUser, AuditActorType.USER, AuditAction.MFA_CHALLENGE_SENT,
+                    "USER", savedUser.getId(), clientIp(httpRequest), httpRequest.getHeader("User-Agent"), requestId);
+            return new AuthResponse(null, null,
+                    new UserProfileResponse(savedUser.getId(), savedUser.getEmail(), savedUser.getFullName(),
+                            savedUser.getPhoneNumber(), savedUser.getEmailVerifiedAt() != null),
+                    true);
+        }
+
+        String accessToken = jwtTokenProvider.generateAccessToken(savedUser);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(savedUser);
+        createSession(savedUser, refreshToken, httpRequest);
+
+        auditService.log(savedUser, AuditActorType.USER, AuditAction.USER_LOGIN_SUCCESS,
+                "USER", savedUser.getId(), clientIp(httpRequest), httpRequest.getHeader("User-Agent"), requestId);
+
+        return new AuthResponse(accessToken, refreshToken,
+                new UserProfileResponse(savedUser.getId(), savedUser.getEmail(), savedUser.getFullName(),
+                        savedUser.getPhoneNumber(), savedUser.getEmailVerifiedAt() != null));
+    }
+
+    private User registerFromGoogle(String normalizedEmail, GoogleTokenVerifierService.GooglePayload payload) {
+        User user = new User();
+        user.setEmail(normalizedEmail);
+        user.setFullName(payload.name() != null && !payload.name().isBlank() ? payload.name() : normalizedEmail);
+        // password_hash không cho null - sinh 1 giá trị ngẫu nhiên không ai biết được, không
+        // phải mật khẩu thật, chỉ để tài khoản Google-only không đăng nhập được bằng mật khẩu
+        // cho tới khi tự đặt qua forgot-password.
+        user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        user.setRole(UserRole.USER);
+        user.setIsActive(true);
+        user.setFailedLoginAttempts(0);
+        user.setEmailVerifiedAt(Instant.now());
+        User savedUser = userRepository.save(user);
+
+        Wallet wallet = new Wallet();
+        wallet.setUser(savedUser);
+        wallet.setCurrency("VND");
+        wallet.setBalance(BigDecimal.ZERO);
+        wallet.activate();
+        walletRepository.save(wallet);
+
+        auditService.log(savedUser, AuditActorType.USER, AuditAction.USER_REGISTERED,
+                "USER", savedUser.getId(), "unknown", "google-oauth", UUID.randomUUID());
+        return savedUser;
     }
 
     @Transactional

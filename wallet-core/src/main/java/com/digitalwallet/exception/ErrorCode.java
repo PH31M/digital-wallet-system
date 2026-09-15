@@ -12,6 +12,7 @@ public enum ErrorCode {
     WEAK_PASSWORD("WEAK_PASSWORD", HttpStatus.BAD_REQUEST, "Password not strong"),
     ACCOUNT_LOCKED("ACCOUNT_LOCKED", HttpStatus.FORBIDDEN, "Account is locked"),
     INVALID_CREDENTIALS("INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED, "Invalid email or password"),
+    INVALID_GOOGLE_TOKEN("INVALID_GOOGLE_TOKEN", HttpStatus.UNAUTHORIZED, "Invalid or unverified Google ID token"),
     INVALID_CURRENT_PASSWORD("INVALID_CURRENT_PASSWORD", HttpStatus.BAD_REQUEST, "Current password is incorrect"),
     UNAUTHORIZED("UNAUTHORIZED", HttpStatus.UNAUTHORIZED, "Authentication is required"),
     RATE_LIMITED("RATE_LIMITED", HttpStatus.TOO_MANY_REQUESTS, "Too many requests"),

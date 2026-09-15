@@ -22,7 +22,7 @@ src/main/resources/
 
 ## Feature areas
 
-- **Auth** — register/login with email OTP verification, JWT access + refresh rotation with reuse detection, optional MFA (email OTP), forgot/reset password, session management, account lockout after repeated failed logins.
+- **Auth** — register/login with email OTP verification, Google Sign-In (`POST /api/auth/google` verifies the client's ID token — see `service/GoogleTokenVerifierService.java`), JWT access + refresh rotation with reuse detection, optional MFA (email OTP), forgot/reset password, session management, account lockout after repeated failed logins.
 - **Wallet** — deposit/withdraw/transfer with a double-entry ledger, idempotency keys, pessimistic row locking (deadlock-safe ordering on transfers), OTP confirmation on large transfers/withdrawals, daily money-movement limits.
 - **Fraud** — rule-based scoring (challenge/block by amount threshold) with an admin review queue for challenged transactions.
 - **MoMo** — top-up via the MoMo AIO v2 gateway; only the signed IPN callback (never the browser return URL) can finalize a payment. See `service/Momo*.java`.
@@ -53,3 +53,4 @@ mvn test
 - Schema changes go through Flyway migrations only (`ddl-auto: validate` — Hibernate will refuse to start if the schema and entities disagree, which has caught real mapping bugs, e.g. `@Lob` mapping a `text` column to Postgres `oid` instead).
 - MoMo's sandbox calls your `MOMO_REDIRECT_URL`/`MOMO_IPN_URL` directly — `localhost` won't work for real sandbox testing; tunnel with `ngrok http 8089` and point those two vars at the tunnel URL.
 - If a migration's checksum drifts from what Flyway recorded (e.g. you edited an already-applied migration locally), `mvn flyway:repair` fixes the recorded checksum without touching data.
+- Google Sign-In only needs `GOOGLE_CLIENT_ID` (a "Web application" OAuth client — create one at console.cloud.google.com) — no client secret or redirect URI, since the backend only verifies an ID token the mobile client already obtained, it doesn't do the authorization-code exchange itself. Leave it blank to leave the feature disabled.

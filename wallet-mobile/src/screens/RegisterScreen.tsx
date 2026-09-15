@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { CommonActions, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthHeader } from '../components/AuthHeader';
 import { Button } from '../components/Button';
@@ -11,6 +11,7 @@ import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../auth/AuthContext';
+import { extractIdToken, useGoogleSignIn } from '../auth/useGoogleSignIn';
 import { useToast } from '../hooks/useToast';
 import { getApiErrorMessage } from '../api/apiError';
 import { colors } from '../theme/tokens';
@@ -62,8 +63,10 @@ function RuleRow({ met, label }: { met: boolean; label: string }) {
 
 export function RegisterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const { showToast } = useToast();
+  const { request: googleRequest, response: googleResponse, promptAsync: promptGoogle, isConfigured: googleConfigured } =
+    useGoogleSignIn();
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -72,6 +75,7 @@ export function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
 
   const strength = useMemo(() => evaluatePassword(password), [password]);
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
@@ -79,6 +83,40 @@ export function RegisterScreen() {
   function comingSoon() {
     showToast('Tính năng sắp ra mắt', 'info');
   }
+
+  async function handleGooglePress() {
+    if (!googleConfigured) {
+      showToast('Đăng ký bằng Google chưa được cấu hình (thiếu EXPO_PUBLIC_GOOGLE_CLIENT_ID)', 'info');
+      return;
+    }
+    await promptGoogle();
+  }
+
+  // Google vừa đăng ký vừa đăng nhập trong 1 bước (backend tự tạo tài khoản nếu email chưa
+  // tồn tại, xem AuthService.loginWithGoogle) - không cần màn OTP riêng vì Google đã tự xác
+  // thực quyền sở hữu email, khác luồng đăng ký bằng mật khẩu bên dưới.
+  useEffect(() => {
+    const idToken = extractIdToken(googleResponse ?? null);
+    if (!idToken) {
+      return;
+    }
+    (async () => {
+      setGoogleSubmitting(true);
+      try {
+        const result = await loginWithGoogle(idToken);
+        if (result.mfaRequired) {
+          navigation.navigate('MfaVerify', { email: result.email });
+          return;
+        }
+        navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Main' }] }));
+      } catch (error) {
+        showToast(getApiErrorMessage(error, 'Đăng ký bằng Google thất bại, vui lòng thử lại'), 'danger');
+      } finally {
+        setGoogleSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleResponse]);
 
   async function handleSubmit() {
     if (!fullName.trim() || !phone.trim() || !email.trim() || !password || !confirmPassword) {
@@ -261,11 +299,15 @@ export function RegisterScreen() {
         </View>
 
         <Pressable
-          onPress={comingSoon}
+          onPress={handleGooglePress}
+          disabled={!googleRequest || googleSubmitting}
           className="h-12 rounded-md bg-surface-container-lowest items-center justify-center flex-row gap-space-sm"
+          style={{ opacity: googleRequest && !googleSubmitting ? 1 : 0.6 }}
         >
           <GoogleIcon size={20} />
-          <Text className="font-label-md text-label-md text-on-surface font-semibold">Đăng ký nhanh bằng Google</Text>
+          <Text className="font-label-md text-label-md text-on-surface font-semibold">
+            {googleSubmitting ? 'Đang xử lý...' : 'Đăng ký nhanh bằng Google'}
+          </Text>
         </Pressable>
 
         <View className="mt-space-xl flex-row items-center justify-center flex-wrap">

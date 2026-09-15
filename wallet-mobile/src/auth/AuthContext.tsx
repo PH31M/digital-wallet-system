@@ -5,6 +5,7 @@ import {
   forgotPasswordApi,
   getProfileApi,
   loginApi,
+  loginWithGoogleApi,
   logoutApi,
   registerApi,
   resendVerificationApi,
@@ -16,7 +17,9 @@ import { UserProfileResponse } from '../types/api';
 
 export type AuthStatus = 'bootstrapping' | 'signedOut' | 'signedIn';
 
-export type LoginResult = { mfaRequired: true } | { mfaRequired: false; user: UserProfileResponse };
+export type LoginResult =
+  | { mfaRequired: true; email: string }
+  | { mfaRequired: false; user: UserProfileResponse };
 
 type RegisterParams = {
   email: string;
@@ -29,6 +32,7 @@ type AuthContextValue = {
   status: AuthStatus;
   user: UserProfileResponse | null;
   login: (email: string, password: string) => Promise<LoginResult>;
+  loginWithGoogle: (idToken: string) => Promise<LoginResult>;
   verifyMfa: (email: string, otp: string) => Promise<void>;
   register: (params: RegisterParams) => Promise<UserProfileResponse>;
   verifyEmail: (userId: string, otp: string) => Promise<void>;
@@ -105,7 +109,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (response.mfaRequired) {
       // Không có access/refresh token trong nhánh này (AuthService.login trả null, null khi
       // mfaEnabled=true) — không lưu gì cả, chờ verifyMfa() hoàn tất đăng nhập thật.
-      return { mfaRequired: true };
+      return { mfaRequired: true, email: response.user.email };
+    }
+    await tokenStorage.setTokens(response.accessToken, response.refreshToken);
+    setUser(response.user);
+    setStatus('signedIn');
+    return { mfaRequired: false, user: response.user };
+  }, []);
+
+  const loginWithGoogle = useCallback(async (idToken: string): Promise<LoginResult> => {
+    const response = await loginWithGoogleApi(idToken);
+    if (response.mfaRequired) {
+      return { mfaRequired: true, email: response.user.email };
     }
     await tokenStorage.setTokens(response.accessToken, response.refreshToken);
     setUser(response.user);
@@ -149,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         status,
         user,
         login,
+        loginWithGoogle,
         verifyMfa,
         register,
         verifyEmail,

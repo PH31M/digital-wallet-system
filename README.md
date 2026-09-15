@@ -4,7 +4,7 @@ A production-style fintech platform built end-to-end: a Spring Boot ledger-backe
 
 ## What it does
 
-- **Accounts & security** — register/login with email OTP verification, JWT access + refresh token rotation with reuse detection ("logout everywhere" on password change or token replay), optional MFA via email OTP, session management (view/revoke active devices), rate limiting per route group.
+- **Accounts & security** — register/login with email OTP verification, Google Sign-In (backend verifies the mobile client's ID token, auto-links to an existing email or creates a pre-verified account), JWT access + refresh token rotation with reuse detection ("logout everywhere" on password change or token replay), optional MFA via email OTP, session management (view/revoke active devices), rate limiting per route group.
 - **Wallet & money movement** — deposit, withdraw, and transfer between users, backed by a real **double-entry ledger** (every transaction posts two offsetting ledger rows), **idempotency keys** so retried requests can't double-charge, and **pessimistic row locking** (with deterministic lock ordering on transfers to avoid deadlocks).
 - **Fraud & limits** — rule-based fraud scoring (challenge/block thresholds), OTP confirmation gate on large transfers/withdrawals, daily money-movement limits, and an admin review queue for challenged transactions.
 - **MoMo payment gateway** — top up a wallet via MoMo (`captureWallet`), with HMAC-SHA256 request signing, constant-time signature verification on the callback, and a strict rule that only the server-to-server IPN callback (never the browser redirect) can finalize a payment and credit the ledger.
@@ -56,6 +56,8 @@ npm run web             # http://localhost:8081
 ```
 
 MailHog (`http://localhost:8025`) catches OTP emails in dev, so the full register → verify → transact flow works without a real mailbox.
+
+Google Sign-In needs a Google Cloud OAuth Client ID (Web application type) — put the same value in `wallet-core/.env`'s `GOOGLE_CLIENT_ID` and `wallet-mobile/.env`'s `EXPO_PUBLIC_GOOGLE_CLIENT_ID`. Leave both blank to just disable the button; everything else works without it.
 
 ## Notable engineering details
 

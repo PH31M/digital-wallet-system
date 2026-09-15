@@ -37,6 +37,11 @@ export async function registerApi(params: {
   return unwrap(response.data);
 }
 
+export async function loginWithGoogleApi(idToken: string): Promise<AuthResponse> {
+  const response = await apiClient.post<ApiResponse<AuthResponse>>('/auth/google', { id_token: idToken });
+  return unwrap(response.data);
+}
+
 export async function logoutApi(refreshToken: string): Promise<void> {
   await apiClient.post<ApiResponse<null>>('/auth/logout', { refreshToken });
 }
