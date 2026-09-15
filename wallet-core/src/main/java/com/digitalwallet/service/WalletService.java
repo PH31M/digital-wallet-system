@@ -169,6 +169,74 @@ public class WalletService {
         return TransactionResponse.from(completed);
     }
 
+    /**
+     * Tạo transaction DEPOSIT ở trạng thái chờ (PENDING) cho luồng nạp tiền qua cổng thanh toán
+     * ngoài (MoMo) — KHÔNG cộng tiền ngay vì tiền chưa thực sự về (chỉ về khi gateway xác nhận
+     * qua IPN, xem MomoPaymentService). Vẫn chạy đúng check hạn mức ngày + fraud rule như
+     * deposit() thường, để không tạo lỗ hổng "né" các rule này chỉ vì đi qua MoMo.
+     *
+     * CHALLENGE/BLOCK ở bước này bị từ chối thẳng (không redirect user sang MoMo) thay vì giữ
+     * PENDING_REVIEW như deposit() thường — vì lúc này người dùng CHƯA trả tiền, không có lý do
+     * để họ trả tiền thật rồi mới biết giao dịch bị treo chờ duyệt thủ công.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public Transaction initiateExternalDeposit(User currentUser, BigDecimal amount, String idempotencyKey,
+            RequestMetadata metadata) {
+        Wallet wallet = lockCurrentUserWallet(currentUser);
+        ensureActive(wallet);
+
+        Transaction transaction = newTransaction(TransactionType.DEPOSIT, amount, idempotencyKey);
+        transaction.setReceiverWallet(wallet);
+        assertWithinLimitOrFail(transaction, currentUser, metadata, wallet);
+
+        Transaction saved = transactionRepository.save(transaction);
+        FraudDecision decision = assessFraud(saved);
+        if (decision != FraudDecision.ALLOW) {
+            saved.fail();
+            Transaction failed = transactionRepository.save(saved);
+            AuditAction action = decision == FraudDecision.BLOCK ? AuditAction.FRAUD_BLOCKED : AuditAction.FRAUD_CHALLENGE;
+            audit(failed, currentUser, action, metadata);
+            eventPublisher.publishEvent(TransactionFailedEvent.of(
+                    currentUser, failed, ErrorCode.MOMO_AMOUNT_NOT_SUPPORTED.getDefaultMessage()));
+            throw new BusinessException(ErrorCode.MOMO_AMOUNT_NOT_SUPPORTED);
+        }
+
+        // assessFraud() chỉ set fraudScore/fraudDecision trên object trong bộ nhớ - lưu lại để
+        // không mất thông tin chấm điểm khi IPN đến sau (request/transaction khác) đọc lại từ DB.
+        Transaction persisted = transactionRepository.save(saved);
+        audit(persisted, currentUser, AuditAction.MOMO_PAYMENT_INITIATED, metadata);
+        return persisted;
+    }
+
+    /**
+     * Hoàn tất transaction DEPOSIT đang PENDING sau khi cổng thanh toán ngoài (MoMo) xác nhận
+     * đã nhận tiền - tái dùng đúng cơ chế ghi ledger/khoá ví/kiểm tra hạn mức của
+     * completePendingDeposit(), giống hệt approvePendingReview() dùng cho fraud review, để
+     * không viết lại logic cộng tiền lần thứ 2.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public TransactionResponse completeMomoDeposit(Transaction transaction, RequestMetadata metadata) {
+        User initiator = initiatorFor(transaction);
+        transaction.setStatus(TransactionStatus.PROCESSING);
+        List<TransactionCompletedEvent.Recipient> recipients = completePendingDeposit(transaction, initiator);
+
+        transaction.complete();
+        Transaction completed = transactionRepository.save(transaction);
+        audit(completed, initiator, AuditAction.DEPOSIT_COMPLETED, metadata);
+        publishTransactionCompleted(completed, recipients.toArray(TransactionCompletedEvent.Recipient[]::new));
+        return TransactionResponse.from(completed);
+    }
+
+    /** Đánh trượt transaction DEPOSIT đang PENDING khi MoMo báo resultCode != 0 hoặc lỗi tạo request. */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public void failExternalDeposit(Transaction transaction, RequestMetadata metadata, String reason) {
+        User initiator = initiatorFor(transaction);
+        transaction.fail();
+        Transaction failed = transactionRepository.save(transaction);
+        audit(failed, initiator, AuditAction.TRANSACTION_FAILED, metadata);
+        eventPublisher.publishEvent(TransactionFailedEvent.of(initiator, failed, reason));
+    }
+
     @Transactional(noRollbackFor = BusinessException.class)
     public TransactionResponse withdraw(User currentUser, WalletAmountRequest request, RequestMetadata metadata) {
         Optional<TransactionResponse> idempotentResponse = existingTransaction(request.getIdempotencyKey());

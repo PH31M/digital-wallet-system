@@ -65,6 +65,10 @@ public class SecurityConfig {
                         // nên permit riêng; các endpoint actuator khác (metrics, info...) vẫn yêu cầu ADMIN.
                         .requestMatchers("/api/auth/**", "/actuator/health", "/actuator/health/**",
                                 "/actuator/prometheus", "/ws").permitAll()
+                        // MoMo gọi thẳng server-to-server (IPN) hoặc redirect trình duyệt (return),
+                        // không có/không thể gửi JWT của user - verify bằng chữ ký HMAC riêng
+                        // (MomoSignatureService), không phải JWT.
+                        .requestMatchers("/api/momo/**").permitAll()
                         // Chỉ dùng cho dev/local (DWS-157). Cân nhắc chặn ở môi trường thật sau, ngoài phạm vi Epic 7.
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/**").hasRole("ADMIN")

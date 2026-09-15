@@ -1,8 +1,10 @@
 package com.digitalwallet.api.controller;
 
+import com.digitalwallet.api.dto.request.MomoDepositRequest;
 import com.digitalwallet.api.dto.request.TransferRequest;
 import com.digitalwallet.api.dto.request.WalletAmountRequest;
 import com.digitalwallet.api.dto.response.LedgerEntryResponse;
+import com.digitalwallet.api.dto.response.MomoDepositInitiateResponse;
 import com.digitalwallet.api.dto.response.TransactionResponse;
 import com.digitalwallet.api.dto.response.WalletLookupResponse;
 import com.digitalwallet.api.dto.response.WalletResponse;
@@ -11,6 +13,7 @@ import com.digitalwallet.common.request.RequestMetadata;
 import com.digitalwallet.common.response.ApiResponse;
 import com.digitalwallet.domain.entity.User;
 import com.digitalwallet.security.CurrentUser;
+import com.digitalwallet.service.MomoPaymentService;
 import com.digitalwallet.service.WalletService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -35,9 +38,11 @@ import java.util.UUID;
 public class WalletController {
 
     private final WalletService walletService;
+    private final MomoPaymentService momoPaymentService;
 
-    public WalletController(WalletService walletService) {
+    public WalletController(WalletService walletService, MomoPaymentService momoPaymentService) {
         this.walletService = walletService;
+        this.momoPaymentService = momoPaymentService;
     }
 
     @GetMapping("/me")
@@ -81,6 +86,20 @@ public class WalletController {
         RequestMetadata metadata = RequestMetadata.from(httpRequest);
         TransactionResponse transaction = walletService.deposit(currentUser, request, metadata);
         return ResponseEntity.ok(ApiResponse.success(metadata.requestId().toString(), Instant.now(), transaction));
+    }
+
+    /**
+     * Nạp tiền qua MoMo - trả về payUrl để client mở app/web MoMo, KHÔNG cộng tiền ngay (chỉ
+     * cộng khi MoMo xác nhận qua POST /momo/ipn, xem MomoPaymentService).
+     */
+    @PostMapping("/me/deposits/momo")
+    public ResponseEntity<ApiResponse<MomoDepositInitiateResponse>> depositViaMomo(
+            @CurrentUser User currentUser,
+            @Valid @RequestBody MomoDepositRequest request,
+            HttpServletRequest httpRequest) {
+        RequestMetadata metadata = RequestMetadata.from(httpRequest);
+        MomoDepositInitiateResponse response = momoPaymentService.initiate(currentUser, request.getAmount(), metadata);
+        return ResponseEntity.ok(ApiResponse.success(metadata.requestId().toString(), Instant.now(), response));
     }
 
     @PostMapping("/me/withdrawals")
