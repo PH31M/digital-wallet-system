@@ -26,7 +26,7 @@ export function SplashScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const progress = useRef(new Animated.Value(0)).current;
   const mountedAt = useRef(Date.now()).current;
-  const { status: authStatus } = useAuth();
+  const { status: authStatus, user } = useAuth();
 
   useEffect(() => {
     Animated.timing(progress, {
@@ -45,12 +45,23 @@ export function SplashScreen() {
     // ứng kết thúc tuỳ tốc độ mạng.
     const remaining = Math.max(0, SPLASH_DURATION_MS - (Date.now() - mountedAt));
     const timer = setTimeout(() => {
+      // Mở lại app với token cũ nhưng tài khoản chưa xác thực OTP (bỏ dở đăng ký) — đưa lại
+      // màn kích hoạt thay vì vào Main (xem doc-comment AuthContext.tsx).
+      if (authStatus === 'signedIn' && user && !user.isVerified) {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'RegisterOtp', params: { userId: user.id, email: user.email } }],
+          }),
+        );
+        return;
+      }
       navigation.dispatch(
         CommonActions.reset({ index: 0, routes: [{ name: authStatus === 'signedIn' ? 'Main' : 'Login' }] }),
       );
     }, remaining);
     return () => clearTimeout(timer);
-  }, [authStatus, mountedAt, navigation]);
+  }, [authStatus, user, mountedAt, navigation]);
 
   const barWidth = progress.interpolate({ inputRange: [0, 1], outputRange: ['12%', '100%'] });
 

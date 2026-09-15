@@ -61,6 +61,14 @@ export function LoginScreen() {
         navigation.navigate('MfaVerify', { email });
         return;
       }
+      if (!result.user.isVerified) {
+        // Tài khoản đăng ký xong nhưng bỏ dở bước OTP kích hoạt (bug thật gặp lúc test) — đưa
+        // thẳng lại màn kích hoạt thay vì vào Main rồi bị "Wallet is frozen" khó hiểu ở mọi
+        // giao dịch tiền.
+        setLoginState('idle');
+        navigation.navigate('RegisterOtp', { userId: result.user.id, email: result.user.email });
+        return;
+      }
       setLoginState('success');
       setTimeout(goToApp, 500);
     } catch (error) {

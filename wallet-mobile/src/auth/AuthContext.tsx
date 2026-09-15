@@ -16,7 +16,7 @@ import { UserProfileResponse } from '../types/api';
 
 export type AuthStatus = 'bootstrapping' | 'signedOut' | 'signedIn';
 
-export type LoginResult = { mfaRequired: true } | { mfaRequired: false };
+export type LoginResult = { mfaRequired: true } | { mfaRequired: false; user: UserProfileResponse };
 
 type RegisterParams = {
   email: string;
@@ -44,11 +44,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  * Nguồn sự thật duy nhất cho trạng thái đăng nhập — bọc quanh `RootNavigator` (xem App.tsx).
  * `status` quyết định Splash điều hướng vào Login hay Main (xem SplashScreen.tsx).
  *
- * ĐÃ BIẾT, CHƯA XỬ LÝ: sau `register()`, backend cấp token thật ngay (AuthService.register
- * trả AuthResponse có access/refresh token), nên `status` chuyển 'signedIn' dù email/ví chưa
- * xác thực (`wallet.status = PENDING_VERIFICATION` tới khi verifyEmail thành công). Nếu app bị
- * tắt giữa chừng OTP kích hoạt rồi mở lại, bootstrap sẽ thấy token hợp lệ và vào thẳng Main —
- * chưa có banner "Ví chưa kích hoạt" nhắc xác thực lại. Cần quyết định thêm nếu muốn chặn.
+ * XỬ LÝ tài khoản chưa xác thực email (bug thật gặp lúc test: đăng ký xong bỏ dở OTP, không
+ * còn đường nào quay lại verify — `login()` vẫn cấp token bình thường vì AuthService.login
+ * không chặn theo `emailVerifiedAt`, chỉ ví `wallet.status=PENDING_VERIFICATION` mới chặn giao
+ * dịch tiền, và message lỗi lúc đó là "Wallet is frozen" rất khó hiểu):
+ * - `login()`/`register()` trả kèm `user.isVerified` — LoginScreen/RegisterScreen tự điều
+ *   hướng sang RegisterOtp thay vì Main nếu `isVerified=false`.
+ * - Bootstrap (mở lại app với token cũ, tài khoản vẫn chưa verify) do `SplashScreen` tự kiểm
+ *   tra `user.isVerified` sau khi `status` thành 'signedIn' rồi quyết định route — xem
+ *   SplashScreen.tsx, không xử lý ở đây vì AuthContext không tự điều hướng.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('bootstrapping');
@@ -106,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await tokenStorage.setTokens(response.accessToken, response.refreshToken);
     setUser(response.user);
     setStatus('signedIn');
-    return { mfaRequired: false };
+    return { mfaRequired: false, user: response.user };
   }, []);
 
   const verifyMfa = useCallback(async (email: string, otp: string) => {
