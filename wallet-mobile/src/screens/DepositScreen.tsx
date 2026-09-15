@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
@@ -9,7 +9,7 @@ import { StackHeader } from '../components/StackHeader';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
-import { depositApi, getCurrentUserWalletApi } from '../api/walletApi';
+import { depositApi, depositViaMomoApi, getCurrentUserWalletApi } from '../api/walletApi';
 import { getApiErrorMessage } from '../api/apiError';
 import { generateIdempotencyKey } from '../utils/idempotencyKey';
 import { RootStackParamList } from '../navigation/RootNavigator';
@@ -25,8 +25,11 @@ type FundingSource = {
   tag?: string;
 };
 
+// `momo` là nguồn DUY NHẤT gọi API thật khác (depositViaMomoApi) — 3 nguồn còn lại chỉ là UI
+// trang trí, cùng gọi depositApi() như nhau (backend không biết/không quan tâm nạp từ đâu).
 const FUNDING_SOURCES: FundingSource[] = [
   { id: 'vcb', icon: 'account_balance', name: 'Vietcombank', detail: '•••• 6868 • Hạn mức: 50.000.000 đ/ngày', tag: 'Ưu tiên' },
+  { id: 'momo', icon: 'qr_code_2', name: 'Ví MoMo', detail: 'Quét mã QR thanh toán qua app MoMo', tag: 'Tức thì' },
   { id: 'visa', icon: 'credit_card', name: 'Thẻ ghi nợ Quốc tế', detail: 'Visa / Mastercard •••• 9234' },
   { id: 'vietqr', icon: 'qr_code_2', name: 'Chuyển khoản VietQR', detail: 'Quét mã Napas 247 từ bất kỳ App Ngân hàng' },
 ];
@@ -60,9 +63,15 @@ export function DepositScreen() {
       showToast(`Số tiền nạp tối thiểu là ${MIN_AMOUNT.toLocaleString('vi-VN')} đ`, 'danger');
       return;
     }
-    // `FUNDING_SOURCES`/ghi chú chỉ là UI trang trí — WalletAmountRequest thật chỉ có
-    // {amount, idempotency_key}, backend không biết/không quan tâm nạp từ nguồn nào.
     const source = FUNDING_SOURCES.find((s) => s.id === selectedId)!;
+
+    if (selectedId === 'momo') {
+      await handleMomoDeposit(source);
+      return;
+    }
+
+    // `FUNDING_SOURCES`/ghi chú chỉ là UI trang trí cho 3 nguồn còn lại — WalletAmountRequest
+    // thật chỉ có {amount, idempotency_key}, backend không biết/không quan tâm nạp từ nguồn nào.
     const balanceBefore = walletQuery.data?.balance ?? 0;
 
     setIsSubmitting(true);
@@ -95,6 +104,53 @@ export function DepositScreen() {
         sourceDetail: 'Ví chính PMPay',
         note,
         failureReason: getApiErrorMessage(error, 'Nạp tiền thất bại, vui lòng thử lại'),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  /**
+   * MoMo KHÔNG cộng tiền ngay (khác depositApi) — backend chỉ tạo transaction chờ, cộng tiền
+   * thật khi MoMo xác nhận qua IPN (server-to-server, ngoài luồng app). App không biết kết quả
+   * cuối cùng ngay lúc này nên luôn điều hướng sang biến thể 'pending', không phải 'completed' —
+   * người dùng xem lại trạng thái thật ở Lịch sử sau khi quay lại app.
+   */
+  async function handleMomoDeposit(source: FundingSource) {
+    setIsSubmitting(true);
+    try {
+      const result = await depositViaMomoApi(amount);
+      const canOpen = await Linking.canOpenURL(result.payUrl);
+      if (!canOpen) {
+        throw new Error('Không mở được liên kết thanh toán MoMo');
+      }
+      await Linking.openURL(result.payUrl);
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'history'] });
+      navigation.navigate('TransactionResult', {
+        kind: 'deposit',
+        variant: 'pending',
+        pendingReason: 'externalGateway',
+        amount,
+        counterpartyLabel: 'Nguồn tiền nạp',
+        counterpartyName: source.name,
+        counterpartyDetail: source.detail,
+        sourceLabel: 'Nạp vào',
+        sourceDetail: 'Ví chính PMPay',
+        note,
+        transactionCode: result.momoOrderId,
+      });
+    } catch (error) {
+      navigation.navigate('TransactionResult', {
+        kind: 'deposit',
+        variant: 'failed',
+        amount,
+        counterpartyLabel: 'Nguồn tiền nạp',
+        counterpartyName: source.name,
+        counterpartyDetail: source.detail,
+        sourceLabel: 'Nạp vào',
+        sourceDetail: 'Ví chính PMPay',
+        note,
+        failureReason: getApiErrorMessage(error, 'Không khởi tạo được thanh toán MoMo, vui lòng thử lại'),
       });
     } finally {
       setIsSubmitting(false);

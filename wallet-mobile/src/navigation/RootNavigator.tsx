@@ -43,6 +43,13 @@ export type TransactionResultParams = {
   transactionCode?: string;
   balanceAfter?: number;
   failureReason?: string;
+  /**
+   * Lý do đứng sau biến thể 'pending' — mặc định 'fraudReview' (giữ đúng copy cũ "vượt hạn mức/
+   * kích hoạt quy tắc an toàn", vốn chỉ đúng cho transfer/withdraw bị fraud CHALLENGE giữ lại).
+   * 'externalGateway' dùng cho nạp qua MoMo: KHÔNG phải bị fraud giữ, mà đơn giản là tiền chưa
+   * về (đang chờ MoMo xác nhận qua IPN) — 2 lý do khác nhau, không dùng chung 1 câu banner.
+   */
+  pendingReason?: 'fraudReview' | 'externalGateway';
 };
 
 /**

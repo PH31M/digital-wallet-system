@@ -150,19 +150,34 @@ export function TransactionResultScreen() {
         </View>
 
         {/* Pending safety banner */}
-        {params.variant === 'pending' && (
-          <View className="rounded-md p-space-md flex-row items-start gap-space-sm" style={{ backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
-            <Icon name="shield_with_heart" size={22} color="#D97706" />
+        {params.variant === 'pending' && params.pendingReason === 'externalGateway' ? (
+          <View className="rounded-md p-space-md flex-row items-start gap-space-sm" style={{ backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <Icon name="schedule" size={22} color="#2563EB" />
             <View className="flex-1 gap-1">
-              <Text className="font-label-md font-semibold" style={{ color: '#78350F' }}>
-                Kiểm tra an toàn tự động
+              <Text className="font-label-md font-semibold" style={{ color: '#1E3A8A' }}>
+                Đang chờ MoMo xác nhận
               </Text>
-              <Text className="font-body-sm text-body-sm leading-relaxed" style={{ color: '#92400E' }}>
-                Giao dịch vượt hạn mức thông thường hoặc kích hoạt quy tắc an toàn. Chuyên viên Quản trị rủi ro PMPay
-                đang xử lý (dự kiến trong 3 - 5 phút). Tiền trong ví tạm thời được giữ an toàn.
+              <Text className="font-body-sm text-body-sm leading-relaxed" style={{ color: '#1E40AF' }}>
+                Hoàn tất thanh toán trên MoMo nếu bạn chưa làm — ví PMPay sẽ tự động được cộng tiền ngay khi MoMo xác
+                nhận (thường trong vài giây), không cần làm gì thêm ở đây.
               </Text>
             </View>
           </View>
+        ) : (
+          params.variant === 'pending' && (
+            <View className="rounded-md p-space-md flex-row items-start gap-space-sm" style={{ backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
+              <Icon name="shield_with_heart" size={22} color="#D97706" />
+              <View className="flex-1 gap-1">
+                <Text className="font-label-md font-semibold" style={{ color: '#78350F' }}>
+                  Kiểm tra an toàn tự động
+                </Text>
+                <Text className="font-body-sm text-body-sm leading-relaxed" style={{ color: '#92400E' }}>
+                  Giao dịch vượt hạn mức thông thường hoặc kích hoạt quy tắc an toàn. Chuyên viên Quản trị rủi ro PMPay
+                  đang xử lý (dự kiến trong 3 - 5 phút). Tiền trong ví tạm thời được giữ an toàn.
+                </Text>
+              </View>
+            </View>
+          )
         )}
 
         {/* Receipt card */}

@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import {
   ApiResponse,
+  MomoDepositInitiateResponse,
   PageResponse,
   TransactionHistoryItemResponse,
   TransactionResponse,
@@ -44,6 +45,18 @@ export async function depositApi(amount: number, idempotencyKey: string): Promis
   const response = await apiClient.post<ApiResponse<TransactionResponse>>('/wallets/me/deposits', {
     amount,
     idempotency_key: idempotencyKey,
+  });
+  return response.data.data;
+}
+
+/**
+ * Khởi tạo nạp tiền qua MoMo — KHÔNG cộng tiền ngay, trả `payUrl` để mở app/web MoMo. Ví chỉ
+ * thực sự được cộng sau khi MoMo xác nhận qua IPN (server-to-server), nên FE không biết kết
+ * quả ngay — điều hướng sang TransactionResult biến thể 'pending', không phải 'completed'.
+ */
+export async function depositViaMomoApi(amount: number): Promise<MomoDepositInitiateResponse> {
+  const response = await apiClient.post<ApiResponse<MomoDepositInitiateResponse>>('/wallets/me/deposits/momo', {
+    amount,
   });
   return response.data.data;
 }

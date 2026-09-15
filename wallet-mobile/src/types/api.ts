@@ -97,6 +97,13 @@ export type TransactionHistoryItemResponse = {
   createdAt: string;
 };
 
+/** MomoDepositInitiateResponse.java — POST /wallets/me/deposits/momo. */
+export type MomoDepositInitiateResponse = {
+  payUrl: string;
+  transactionId: string;
+  momoOrderId: string;
+};
+
 /**
  * WalletLookupResponse.java — GET /wallets/lookup?identifier=... — tra cứu ví người nhận
  * theo email/SĐT cho màn Chuyển tiền. Chỉ trả field tối thiểu để xác nhận đúng người, KHÔNG
