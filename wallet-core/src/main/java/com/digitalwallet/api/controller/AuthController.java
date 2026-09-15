@@ -1,6 +1,7 @@
 package com.digitalwallet.api.controller;
 
 import com.digitalwallet.api.dto.request.ForgotPasswordRequest;
+import com.digitalwallet.api.dto.request.GoogleLoginRequest;
 import com.digitalwallet.api.dto.request.LoginRequest;
 import com.digitalwallet.api.dto.request.RefreshTokenRequest;
 import com.digitalwallet.api.dto.request.RegisterRequest;
@@ -43,6 +44,19 @@ public class AuthController {
             HttpServletRequest httpRequest) {
         UUID requestId = RequestIds.getUuid(httpRequest);
         AuthResponse response = authService.login(request, httpRequest, requestId);
+
+        return ResponseEntity.ok(ApiResponse.success(
+                requestId.toString(),
+                Instant.now(),
+                response));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<ApiResponse<AuthResponse>> loginWithGoogle(
+            @Valid @RequestBody GoogleLoginRequest request,
+            HttpServletRequest httpRequest) {
+        UUID requestId = RequestIds.getUuid(httpRequest);
+        AuthResponse response = authService.loginWithGoogle(request, httpRequest, requestId);
 
         return ResponseEntity.ok(ApiResponse.success(
                 requestId.toString(),
