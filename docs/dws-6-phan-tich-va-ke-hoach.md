@@ -1,3 +1,11 @@
+> ✅ **ĐÃ HOÀN THÀNH (15/09/2026)** — cả 5 Story đề xuất bên dưới đều đã có code thật, đã test:
+> quản lý user cho admin (`AdminUserController`/`Service` + test), audit log nâng cao (filter +
+> export CSV), Admin Dashboard (`AdminDashboardController`/`Service`/`Repository` + test),
+> System Monitoring (actuator + Prometheus/Grafana trong `docker-compose.yml`), và admin duyệt
+> Fraud Assessment + test. Giữ file này lại làm tài liệu tham khảo cho lý do thiết kế
+> (vd. vì sao tách `AuditLogSpecifications` riêng, vì sao dùng `Pageable` sanitize thủ công),
+> không dùng làm nguồn kế hoạch nữa.
+>
 > **Lưu ý về file này**: đây là bản kế hoạch làm việc (working plan) do Claude tổng hợp dựa trên phân tích code thực tế trong `wallet-core/` và cấu trúc Jira hiện có (đối chiếu với cách các epic DWS-2, DWS-3 đã được breakdown). File này bổ sung cho `docs/phan-tich-digital-wallet-system.md` (bản phân tích tổng thể ngày 01/08/2026), tập trung riêng vào epic **DWS-6 – Admin & Monitoring**.
 
 # DWS-6 — Admin & Monitoring: Phân tích & Kế hoạch hoàn thành

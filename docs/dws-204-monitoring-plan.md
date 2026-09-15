@@ -1,5 +1,11 @@
 # DWS-204 — System Monitoring: Health & Metrics — Kế hoạch hoàn thành chi tiết
 
+> ✅ **ĐÃ HOÀN THÀNH (15/09/2026)** — actuator (`spring-boot-starter-actuator`), cấu hình
+> `management.*` trong `application.yml`, bảo vệ `/actuator/**` bằng role ADMIN trong
+> `SecurityConfig`, Redis health indicator, Prometheus + Grafana trong `docker-compose.yml`,
+> và test `/actuator/health` — tất cả đã có code thật. Giữ lại làm tài liệu tham khảo thiết kế,
+> không dùng làm nguồn kế hoạch nữa.
+
 **Story:** DWS-204 (con của Epic DWS-6 — Admin & Monitoring)
 **6 Subtask:** DWS-223 → DWS-228
 
