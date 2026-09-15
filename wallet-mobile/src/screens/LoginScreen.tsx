@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions, useNavigation } from '@react-navigation/native';
@@ -10,7 +10,8 @@ import { GoogleIcon } from '../components/GoogleIcon';
 import { Icon } from '../components/Icon';
 import { Input } from '../components/Input';
 import { Logo } from '../components/Logo';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth, LoginResult } from '../auth/AuthContext';
+import { extractIdToken, useGoogleSignIn } from '../auth/useGoogleSignIn';
 import { useToast } from '../hooks/useToast';
 import { getApiErrorMessage } from '../api/apiError';
 import { colors } from '../theme/tokens';
@@ -26,8 +27,10 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function LoginScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const { showToast } = useToast();
+  const { request: googleRequest, response: googleResponse, promptAsync: promptGoogle, isConfigured: googleConfigured } =
+    useGoogleSignIn();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -40,6 +43,26 @@ export function LoginScreen() {
 
   function goToApp() {
     navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Main' }] }));
+  }
+
+  // `login()` xử lý mfaRequired/chưa verify giống hệt `loginWithGoogle()` - dùng chung 1 chỗ
+  // điều hướng cho cả 2 luồng thay vì lặp lại logic.
+  function handleLoginResult(result: LoginResult) {
+    if (result.mfaRequired) {
+      setLoginState('idle');
+      navigation.navigate('MfaVerify', { email: result.email });
+      return;
+    }
+    if (!result.user.isVerified) {
+      // Tài khoản đăng ký xong nhưng bỏ dở bước OTP kích hoạt (bug thật gặp lúc test) — đưa
+      // thẳng lại màn kích hoạt thay vì vào Main rồi bị "Wallet is frozen" khó hiểu ở mọi
+      // giao dịch tiền.
+      setLoginState('idle');
+      navigation.navigate('RegisterOtp', { userId: result.user.id, email: result.user.email });
+      return;
+    }
+    setLoginState('success');
+    setTimeout(goToApp, 500);
   }
 
   async function handleLogin() {
@@ -56,26 +79,40 @@ export function LoginScreen() {
     setLoginState('loading');
     try {
       const result = await login(email, password);
-      if (result.mfaRequired) {
-        setLoginState('idle');
-        navigation.navigate('MfaVerify', { email });
-        return;
-      }
-      if (!result.user.isVerified) {
-        // Tài khoản đăng ký xong nhưng bỏ dở bước OTP kích hoạt (bug thật gặp lúc test) — đưa
-        // thẳng lại màn kích hoạt thay vì vào Main rồi bị "Wallet is frozen" khó hiểu ở mọi
-        // giao dịch tiền.
-        setLoginState('idle');
-        navigation.navigate('RegisterOtp', { userId: result.user.id, email: result.user.email });
-        return;
-      }
-      setLoginState('success');
-      setTimeout(goToApp, 500);
+      handleLoginResult(result);
     } catch (error) {
       setLoginState('idle');
       showToast(getApiErrorMessage(error, 'Đăng nhập thất bại, vui lòng thử lại'), 'danger');
     }
   }
+
+  async function handleGooglePress() {
+    if (!googleConfigured) {
+      showToast('Đăng nhập Google chưa được cấu hình (thiếu EXPO_PUBLIC_GOOGLE_CLIENT_ID)', 'info');
+      return;
+    }
+    await promptGoogle();
+  }
+
+  // promptAsync() trả kết quả bất đồng bộ (redirect trình duyệt) - xử lý ở effect khi
+  // `googleResponse` đổi, không xử lý ngay trong handleGooglePress().
+  useEffect(() => {
+    const idToken = extractIdToken(googleResponse ?? null);
+    if (!idToken) {
+      return;
+    }
+    (async () => {
+      setLoginState('loading');
+      try {
+        const result = await loginWithGoogle(idToken);
+        handleLoginResult(result);
+      } catch (error) {
+        setLoginState('idle');
+        showToast(getApiErrorMessage(error, 'Đăng nhập Google thất bại, vui lòng thử lại'), 'danger');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleResponse]);
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -160,8 +197,10 @@ export function LoginScreen() {
         </View>
 
         <Pressable
-          onPress={comingSoon}
+          onPress={handleGooglePress}
+          disabled={!googleRequest}
           className="h-12 rounded-md bg-surface-container-lowest items-center justify-center flex-row gap-space-sm"
+          style={{ opacity: googleRequest ? 1 : 0.6 }}
         >
           <GoogleIcon size={20} />
           <Text className="font-headline-sm text-headline-sm text-on-surface">Đăng nhập với Google</Text>
