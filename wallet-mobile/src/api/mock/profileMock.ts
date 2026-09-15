@@ -1,6 +1,6 @@
 /**
  * Dữ liệu hiển thị riêng cho Hồ sơ cá nhân — không nằm trong UserProfileResponse thật (đó chỉ
- * có id/email/full_name/phone_number/is_verified), các field dưới đây sẽ đến từ những API
+ * có id/email/fullName/phoneNumber/isVerified), các field dưới đây sẽ đến từ những API
  * khác (ví, bảo mật, thiết bị...) khi nối thật ở phase sau.
  */
 export const mockProfileDetails = {

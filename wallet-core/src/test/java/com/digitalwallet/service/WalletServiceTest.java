@@ -20,8 +20,10 @@ import com.digitalwallet.domain.event.BalanceUpdatedEvent;
 import com.digitalwallet.domain.event.FraudAlertEvent;
 import com.digitalwallet.domain.event.TransactionCompletedEvent;
 import com.digitalwallet.domain.event.TransactionFailedEvent;
+import com.digitalwallet.api.dto.response.WalletLookupResponse;
 import com.digitalwallet.domain.repository.LedgerEntryRepository;
 import com.digitalwallet.domain.repository.TransactionRepository;
+import com.digitalwallet.domain.repository.UserRepository;
 import com.digitalwallet.domain.repository.WalletRepository;
 import com.digitalwallet.exception.BusinessException;
 import com.digitalwallet.exception.DailyLimitExceededException;
@@ -61,6 +63,9 @@ class WalletServiceTest {
 
     @Mock
     private LedgerEntryRepository ledgerEntryRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     @Mock
     private FraudService fraudService;
@@ -264,6 +269,41 @@ class WalletServiceTest {
     }
 
     @Test
+    void getWallet_belongsToDifferentUser_throwsAccessDenied() {
+        WalletService walletService = walletService();
+        User userB = user();
+        Wallet walletB = wallet(userB, new BigDecimal("50.00"));
+        User userA = user();
+
+        when(walletRepository.findById(walletB.getId())).thenReturn(Optional.of(walletB));
+
+        assertThatThrownBy(() -> walletService.getWallet(walletB.getId(), userA))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
+    @Test
+    void getLedgerEntries_userNotParticipant_throwsAccessDenied() {
+        WalletService walletService = walletService();
+        User userB = user();
+        User userC = user();
+        Wallet walletB = wallet(userB, new BigDecimal("100.00"));
+        Wallet walletC = wallet(userC, new BigDecimal("5.00"));
+        Transaction transaction = new Transaction();
+        transaction.setId(UUID.randomUUID());
+        transaction.setSenderWallet(walletB);
+        transaction.setReceiverWallet(walletC);
+        User userA = user();
+
+        when(transactionRepository.findById(transaction.getId())).thenReturn(Optional.of(transaction));
+
+        assertThatThrownBy(() -> walletService.getLedgerEntries(transaction.getId(), userA))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.ACCESS_DENIED);
+    }
+
     void transfer_amountAtOrAboveOtpThreshold_holdsForOtpConfirmationWithoutMovingFunds() {
         WalletService walletService = walletService();
         RequestMetadata metadata = metadata();
@@ -445,10 +485,68 @@ class WalletServiceTest {
         verifyPublishedEvent(TransactionFailedEvent.class);
     }
 
+    @Test
+    void lookupRecipient_byEmail_returnsMaskedNameAndWalletId() {
+        WalletService walletService = walletService();
+        User recipient = user();
+        recipient.setFullName("Nguyen Van An");
+        Wallet recipientWallet = wallet(recipient, new BigDecimal("100.00"));
+
+        when(userRepository.findByEmail(recipient.getEmail().toLowerCase())).thenReturn(Optional.of(recipient));
+        when(walletRepository.findByUserId(recipient.getId())).thenReturn(Optional.of(recipientWallet));
+
+        WalletLookupResponse response = walletService.lookupRecipient(" " + recipient.getEmail().toUpperCase() + " ");
+
+        assertThat(response.walletId()).isEqualTo(recipientWallet.getId());
+        assertThat(response.maskedName()).isEqualTo("N***** V** A*");
+        assertThat(response.status()).isEqualTo("ACTIVE");
+    }
+
+    @Test
+    void lookupRecipient_byPhoneNumber_fallsBackWhenEmailLookupMisses() {
+        WalletService walletService = walletService();
+        User recipient = user();
+        recipient.setPhoneNumber("0987654321");
+        Wallet recipientWallet = wallet(recipient, new BigDecimal("0"));
+
+        when(userRepository.findByEmail("0987654321")).thenReturn(Optional.empty());
+        when(userRepository.findByPhoneNumber("0987654321")).thenReturn(Optional.of(recipient));
+        when(walletRepository.findByUserId(recipient.getId())).thenReturn(Optional.of(recipientWallet));
+
+        WalletLookupResponse response = walletService.lookupRecipient("0987654321");
+
+        assertThat(response.walletId()).isEqualTo(recipientWallet.getId());
+    }
+
+    @Test
+    void lookupRecipient_unknownIdentifier_throwsResourceNotFound() {
+        WalletService walletService = walletService();
+
+        when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
+        when(userRepository.findByPhoneNumber("nobody@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> walletService.lookupRecipient("nobody@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.RESOURCE_NOT_FOUND);
+    }
+
+    @Test
+    void lookupRecipient_blankIdentifier_throwsValidationFailed() {
+        WalletService walletService = walletService();
+
+        assertThatThrownBy(() -> walletService.lookupRecipient("   "))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_FAILED);
+
+        verify(userRepository, never()).findByEmail(any());
+    }
+
     private static final BigDecimal OTP_REQUIRED_AMOUNT = new BigDecimal("5000000");
 
     private WalletService walletService() {
-        return new WalletService(walletRepository, transactionRepository, ledgerEntryRepository,
+        return new WalletService(walletRepository, transactionRepository, ledgerEntryRepository, userRepository,
                 fraudService, transactionLimitService, auditService, eventPublisher,
                 otpService, emailOtpService, OTP_REQUIRED_AMOUNT);
     }

@@ -1,5 +1,6 @@
 package com.digitalwallet.api.dto.request;
 
+import com.digitalwallet.common.validation.NoHtml;
 import com.digitalwallet.common.validation.StrongPassword;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Email;
@@ -18,8 +19,10 @@ public class RegisterRequest {
     @JsonProperty("full_name")
     @NotBlank(message = "Full name is required")
     @Size(min = 2, max = 100, message = "Full name must be between 2 and 100 characters")
+    @NoHtml
     private String fullName;
 
+    @NoHtml
     private String phoneNumber;
 
     @NotBlank(message = "Password is required")

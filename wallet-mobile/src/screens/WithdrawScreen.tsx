@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Icon } from '../components/Icon';
 import { StackHeader } from '../components/StackHeader';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
-import { mockWallet } from '../api/mock/homeMock';
-import { generateTransactionCode } from '../utils/transferHelpers';
+import { getApiErrorMessage } from '../api/apiError';
+import { getCurrentUserWalletApi, withdrawApi } from '../api/walletApi';
+import { generateIdempotencyKey } from '../utils/idempotencyKey';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 const MIN_AMOUNT = 50_000;
@@ -32,14 +35,19 @@ const BANK_ACCOUNTS: BankAccount[] = [
 
 export function WithdrawScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { user } = useAuth();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const walletQuery = useQuery({ queryKey: ['wallet', 'me'], queryFn: getCurrentUserWalletApi });
 
   const [selectedBankId, setSelectedBankId] = useState('vcb');
   const [amount, setAmount] = useState(2_000_000);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [idempotencyKey] = useState(() => generateIdempotencyKey());
 
   const selectedBank = BANK_ACCOUNTS.find((b) => b.id === selectedBankId)!;
+  const balance = walletQuery.data?.balance ?? 0;
 
   function comingSoon() {
     showToast('Tính năng sắp ra mắt', 'info');
@@ -50,7 +58,21 @@ export function WithdrawScreen() {
     setAmount(digitsOnly ? parseInt(digitsOnly, 10) : 0);
   }
 
-  function handleSubmit() {
+  function resultBase() {
+    // `BANK_ACCOUNTS`/tài khoản nhận chỉ là UI trang trí — WalletAmountRequest thật chỉ có
+    // {amount, idempotency_key}, backend không có khái niệm "rút về ngân hàng nào".
+    return {
+      kind: 'withdraw' as const,
+      amount,
+      counterpartyLabel: 'Tài khoản nhận tiền',
+      counterpartyName: selectedBank.bankName,
+      counterpartyDetail: `${selectedBank.maskedNumber} • ${selectedBank.ownerName}`,
+      sourceLabel: 'Nguồn tiền trích nợ',
+      sourceDetail: 'Ví chính PMPay',
+    };
+  }
+
+  async function handleSubmit() {
     if (amount < MIN_AMOUNT) {
       showToast(`Số tiền rút tối thiểu là ${MIN_AMOUNT.toLocaleString('vi-VN')} đ`, 'danger');
       return;
@@ -59,28 +81,37 @@ export function WithdrawScreen() {
       showToast(`Số tiền vượt quá hạn mức tối đa trong ngày (${DAILY_LIMIT.toLocaleString('vi-VN')} đ)`, 'danger');
       return;
     }
-    if (amount > mockWallet.balance) {
+    if (amount > balance) {
       showToast('Số dư khả dụng không đủ', 'danger');
       return;
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      const isFraudReview = amount > FRAUD_REVIEW_THRESHOLD;
+    try {
+      const transaction = await withdrawApi(amount, idempotencyKey);
+      queryClient.invalidateQueries({ queryKey: ['wallet', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'history'] });
+
+      if (transaction.status === 'PENDING_OTP_CONFIRMATION') {
+        navigation.navigate('OtpConfirm', { transactionId: transaction.id, kind: 'withdraw', amount });
+        return;
+      }
+
       navigation.navigate('TransactionResult', {
-        kind: 'withdraw',
-        variant: isFraudReview ? 'pending' : 'completed',
-        amount,
-        counterpartyLabel: 'Tài khoản nhận tiền',
-        counterpartyName: selectedBank.bankName,
-        counterpartyDetail: `${selectedBank.maskedNumber} • ${selectedBank.ownerName}`,
-        sourceLabel: 'Nguồn tiền trích nợ',
-        sourceDetail: 'Ví chính PMPay',
-        transactionCode: generateTransactionCode(),
-        balanceAfter: mockWallet.balance - amount,
+        ...resultBase(),
+        variant: transaction.status === 'COMPLETED' ? 'completed' : 'pending',
+        transactionCode: transaction.referenceNumber,
+        balanceAfter: transaction.status === 'COMPLETED' ? balance - amount : undefined,
       });
-    }, 900);
+    } catch (error) {
+      navigation.navigate('TransactionResult', {
+        ...resultBase(),
+        variant: 'failed',
+        failureReason: getApiErrorMessage(error, 'Rút tiền thất bại, vui lòng thử lại'),
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -88,7 +119,7 @@ export function WithdrawScreen() {
       <StackHeader
         title="Rút Tiền"
         onBack={() => navigation.goBack()}
-        avatarName="Nguyễn Văn An"
+        avatarName={user?.fullName ?? ''}
         rightAccessory={
           <Pressable onPress={comingSoon} className="w-9 h-9 items-center justify-center">
             <Icon name="help_outline" size={22} color={colors.onSurfaceVariant} />
@@ -123,7 +154,7 @@ export function WithdrawScreen() {
               </View>
             </View>
             <Pressable
-              onPress={() => setAmount(mockWallet.balance)}
+              onPress={() => setAmount(balance)}
               className="px-space-sm py-1.5 rounded-full bg-surface-container-high"
             >
               <Text className="font-label-sm text-label-sm text-primary">Rút tất cả</Text>
@@ -132,7 +163,7 @@ export function WithdrawScreen() {
           <View className="mt-space-md p-space-sm rounded-md bg-surface-container-low/60 flex-row items-center justify-between">
             <Text className="font-body-sm text-body-sm text-on-surface-variant">Số dư khả dụng</Text>
             <Text className="font-numeric-ledger text-numeric-ledger text-on-surface font-semibold">
-              {mockWallet.balance.toLocaleString('vi-VN')} ₫
+              {balance.toLocaleString('vi-VN')} ₫
             </Text>
           </View>
         </View>

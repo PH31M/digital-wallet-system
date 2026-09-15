@@ -15,34 +15,3 @@ const KNOWN_AMOUNT_WORDS: Record<number, string> = {
 export function getAmountInWords(amount: number): string {
   return KNOWN_AMOUNT_WORDS[amount] ?? `${amount.toLocaleString('vi-VN')} đồng`;
 }
-
-export function generateTransactionCode(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  const d = date.getDate().toString().padStart(2, '0');
-  const random = Math.floor(100000 + Math.random() * 900000);
-  return `TXN-${y}${m}${d}-${random}`;
-}
-
-import { TransactionResultVariant, TransferDraft } from '../navigation/RootNavigator';
-
-/** Dựng tham số Kết quả giao dịch cho luồng Chuyển tiền từ dữ liệu đã thu thập ở TransferScreen. */
-export function buildTransferResultParams(
-  draft: TransferDraft,
-  variant: TransactionResultVariant,
-  balanceAfter: number,
-) {
-  return {
-    kind: 'transfer' as const,
-    variant,
-    amount: draft.amount,
-    counterpartyLabel: 'Người nhận',
-    counterpartyName: draft.recipientName,
-    counterpartyDetail: `${draft.recipientWalletCode} (${draft.recipientWalletLabel})`,
-    sourceLabel: 'Nguồn tiền',
-    sourceDetail: 'Ví chính (•••• 8829)',
-    note: draft.note,
-    transactionCode: generateTransactionCode(),
-    balanceAfter,
-  };
-}

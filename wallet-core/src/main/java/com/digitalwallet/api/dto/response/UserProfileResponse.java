@@ -18,10 +18,6 @@ public class UserProfileResponse {
     @JsonProperty("is_verified")
     private final boolean verified;
 
-    public UserProfileResponse(UUID id, String email, String fullName, boolean verified) {
-        this(id, email, fullName, null, verified);
-    }
-
     public UserProfileResponse(UUID id, String email, String fullName, String phoneNumber, boolean verified) {
         this.id = id;
         this.email = email;

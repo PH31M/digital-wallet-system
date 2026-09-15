@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../components/Button';
@@ -8,24 +9,39 @@ import { Icon } from '../components/Icon';
 import { OtpEntryPanel } from '../components/OtpEntryPanel';
 import { StackHeader } from '../components/StackHeader';
 import { useToast } from '../hooks/useToast';
+import { getApiErrorMessage } from '../api/apiError';
+import { confirmTransactionOtpApi } from '../api/walletApi';
 import { colors } from '../theme/tokens';
 import { formatCurrency } from '../utils/formatCurrency';
-import { buildTransferResultParams } from '../utils/transferHelpers';
-import { mockWallet } from '../api/mock/homeMock';
-import { RootStackParamList } from '../navigation/RootNavigator';
+import { RootStackParamList, TransactionKind } from '../navigation/RootNavigator';
 
 const OTP_LENGTH = 6;
 const RESEND_SECONDS = 45;
-const OTP_REQUIRED_AMOUNT = 5_000_000;
+const OTP_REQUIRED_AMOUNT = 5_000_000; // khớp wallet.otp.required-amount (mặc định) bên backend
 
+const KIND_LABEL: Record<TransactionKind, string> = {
+  transfer: 'Chuyển tiền',
+  deposit: 'Nạp tiền',
+  withdraw: 'Rút tiền',
+};
+
+/**
+ * Dùng chung cho mọi giao dịch rơi vào PENDING_OTP_CONFIRMATION (rút/chuyển >= ngưỡng OTP) —
+ * nhận `transactionId` THẬT (không phải draft dựng tay), gọi đúng
+ * `POST /transactions/{id}/confirm-otp {otp}`. Không còn hiện tên/mã ví người nhận vì
+ * `TransactionResponse` không có field đó (giống lý do TransactionHistoryItemResponse không
+ * có tên đối tác — xem transactionDisplay.ts).
+ */
 export function OtpConfirmScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'OtpConfirm'>>();
   const { showToast } = useToast();
-  const draft = route.params;
+  const queryClient = useQueryClient();
+  const { transactionId, kind, amount } = route.params;
 
   const [otp, setOtp] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -35,17 +51,35 @@ export function OtpConfirmScreen() {
 
   function handleResend() {
     if (secondsLeft > 0) return;
+    // Không có endpoint "gửi lại OTP giao dịch" riêng — mã đã gửi lúc tạo giao dịch
+    // (PENDING_OTP_CONFIRMATION), hết hạn thì phải huỷ và thử lại giao dịch từ đầu.
+    showToast('Mã cũ có thể đã hết hạn — nếu không nhận được, vui lòng quay lại và thử lại giao dịch', 'info');
     setSecondsLeft(RESEND_SECONDS);
-    setOtp('');
-    showToast('Đã gửi lại mã OTP', 'success');
   }
 
-  function handleConfirm() {
-    // Demo: mọi mã 6 số đều được coi là hợp lệ (chưa nối API xác thực OTP thật).
-    navigation.navigate(
-      'TransactionResult',
-      buildTransferResultParams(draft, 'completed', mockWallet.balance - draft.amount),
-    );
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const transaction = await confirmTransactionOtpApi(transactionId, otp);
+      queryClient.invalidateQueries({ queryKey: ['wallet', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['transactions', 'history'] });
+      navigation.navigate('TransactionResult', {
+        kind,
+        variant: 'completed',
+        amount: transaction.amount,
+        counterpartyLabel: kind === 'withdraw' ? 'Tài khoản nhận tiền' : 'Người nhận',
+        counterpartyName: 'Đã xác thực OTP',
+        counterpartyDetail: transaction.referenceNumber,
+        sourceLabel: kind === 'withdraw' ? 'Nguồn tiền trích nợ' : 'Nguồn tiền',
+        sourceDetail: 'Ví chính PMPay',
+        transactionCode: transaction.referenceNumber,
+      });
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Mã OTP không đúng hoặc đã hết hạn'), 'danger');
+      setOtp('');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -53,7 +87,6 @@ export function OtpConfirmScreen() {
       <StackHeader
         title="Xác Thực Bảo Mật Otp"
         onBack={() => navigation.goBack()}
-        avatarName="Nguyễn Văn An"
         rightAccessory={<Icon name="help_outline" size={22} color={colors.onSurfaceVariant} />}
       />
       <ScrollView className="flex-1 px-gutter-mobile" contentContainerStyle={{ paddingVertical: 16, gap: 16 }}>
@@ -101,7 +134,7 @@ export function OtpConfirmScreen() {
             </Text>
             <View className="flex-row items-baseline gap-1">
               <Text className="font-numeric-balance-mobile text-numeric-balance-mobile text-primary font-bold">
-                -{draft.amount.toLocaleString('vi-VN')}
+                -{amount.toLocaleString('vi-VN')}
               </Text>
               <Text className="font-headline-sm text-headline-sm text-primary font-bold">₫</Text>
             </View>
@@ -109,19 +142,14 @@ export function OtpConfirmScreen() {
 
           <View className="gap-2 pt-1">
             <View className="flex-row items-center justify-between">
-              <Text className="font-body-sm text-body-sm text-on-surface-variant">Người thụ hưởng</Text>
-              <View className="items-end">
-                <Text className="font-label-md text-label-md text-primary font-semibold">{draft.recipientName}</Text>
-                <Text className="font-label-caption text-label-caption text-on-surface-variant">
-                  Ví: {draft.recipientWalletCode}
-                </Text>
-              </View>
+              <Text className="font-body-sm text-body-sm text-on-surface-variant">Loại giao dịch</Text>
+              <Text className="font-label-md text-label-md text-primary font-semibold">{KIND_LABEL[kind]}</Text>
             </View>
             <View className="flex-row items-center justify-between">
               <Text className="font-body-sm text-body-sm text-on-surface-variant">Nguồn thanh toán</Text>
               <View className="flex-row items-center gap-1.5">
                 <Icon name="account_balance_wallet" size={16} color={colors.secondary} />
-                <Text className="font-label-md text-label-md text-on-surface font-medium">Ví chính (•••• 8829)</Text>
+                <Text className="font-label-md text-label-md text-on-surface font-medium">Ví chính PMPay</Text>
               </View>
             </View>
             <View className="flex-row items-center justify-between">
@@ -136,18 +164,14 @@ export function OtpConfirmScreen() {
           onChange={setOtp}
           secondsLeft={secondsLeft}
           onResend={handleResend}
-          description={
-            <>
-              Mã OTP 6 chữ số vừa được gửi đến số điện thoại{' '}
-              <Text className="font-semibold text-on-surface">+84 98***4321</Text> qua tin nhắn SMS
-            </>
-          }
+          description={<>Mã OTP 6 chữ số vừa được gửi đến <Text className="font-semibold text-on-surface">email của bạn</Text></>}
         />
 
         <Button
           label="Xác nhận giao dịch"
           onPress={handleConfirm}
           disabled={otp.length !== OTP_LENGTH}
+          loading={submitting}
         />
 
         <View className="flex-row items-center justify-center gap-1.5">

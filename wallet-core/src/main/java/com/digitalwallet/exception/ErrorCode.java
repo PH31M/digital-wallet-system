@@ -48,7 +48,17 @@ public enum ErrorCode {
     FRAUD_BLOCKED("FRAUD_BLOCKED", HttpStatus.BAD_REQUEST, "Transaction blocked by fraud rules"),
     INSUFFICIENT_BALANCE("INSUFFICIENT_BALANCE", HttpStatus.BAD_REQUEST, "Insufficient balance"),
     DAILY_LIMIT_EXCEEDED("DAILY_LIMIT_EXCEEDED", HttpStatus.BAD_REQUEST, "Daily transaction limit exceeded"),
-    WALLET_FROZEN("WALLET_FROZEN", HttpStatus.BAD_REQUEST, "Wallet is frozen");
+    WALLET_FROZEN("WALLET_FROZEN", HttpStatus.BAD_REQUEST, "Wallet is frozen"),
+
+    // MoMo payment gateway
+    MOMO_AMOUNT_NOT_SUPPORTED("MOMO_AMOUNT_NOT_SUPPORTED", HttpStatus.BAD_REQUEST,
+            "Amount is too high for MoMo top-up, please use a smaller amount or the regular deposit flow"),
+    PAYMENT_GATEWAY_ERROR("PAYMENT_GATEWAY_ERROR", HttpStatus.BAD_GATEWAY,
+            "Payment gateway request failed"),
+    INVALID_PAYMENT_SIGNATURE("INVALID_PAYMENT_SIGNATURE", HttpStatus.BAD_REQUEST,
+            "Payment callback signature is invalid"),
+    PAYMENT_AMOUNT_MISMATCH("PAYMENT_AMOUNT_MISMATCH", HttpStatus.BAD_REQUEST,
+            "Payment callback amount does not match the original transaction");
 
     private final String code;
     private final HttpStatus httpStatus;

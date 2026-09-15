@@ -7,9 +7,10 @@ import { Button } from '../components/Button';
 import { Icon } from '../components/Icon';
 import { OtpEntryPanel } from '../components/OtpEntryPanel';
 import { StackHeader } from '../components/StackHeader';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { getApiErrorMessage } from '../api/apiError';
 import { colors } from '../theme/tokens';
-import { maskPhoneNumber } from '../utils/formatPhone';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 const OTP_LENGTH = 6;
@@ -19,15 +20,22 @@ const RESEND_SECONDS = 45;
  * OTP kích hoạt tài khoản mới — dùng chung cơ chế nhập với OtpConfirmScreen (giao dịch) theo
  * đúng tinh thần spec 3.4 ("dùng chung nhiều luồng: đăng ký / quên mật khẩu / MFA"), chỉ đổi
  * phần nội dung xung quanh vì design-export không có bản riêng cho luồng đăng ký.
+ *
+ * SỬA so với bản mock: backend gửi OTP kích hoạt qua EMAIL (`AuthService.sendRegistrationOtp`
+ * → `emailOtpService`), KHÔNG PHẢI SMS/số điện thoại như copy gốc — `POST /auth/verify-email`
+ * nhận `{user_id, otp}`, `POST /auth/resend-verification` nhận `{user_id, email}`, cả 2 đều
+ * không có tham số số điện thoại. Route param đổi từ `{ phone }` sang `{ userId, email }`.
  */
 export function RegisterOtpScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'RegisterOtp'>>();
+  const { verifyEmail, resendVerification } = useAuth();
   const { showToast } = useToast();
-  const { phone } = route.params;
+  const { userId, email } = route.params;
 
   const [otp, setOtp] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(RESEND_SECONDS);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -35,16 +43,29 @@ export function RegisterOtpScreen() {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  function handleResend() {
+  async function handleResend() {
     if (secondsLeft > 0) return;
-    setSecondsLeft(RESEND_SECONDS);
-    setOtp('');
-    showToast('Đã gửi lại mã OTP', 'success');
+    try {
+      await resendVerification(userId, email);
+      setSecondsLeft(RESEND_SECONDS);
+      setOtp('');
+      showToast('Đã gửi lại mã OTP qua email', 'success');
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Không gửi lại được mã OTP, vui lòng thử lại sau'), 'danger');
+    }
   }
 
-  function handleConfirm() {
-    // Demo: mọi mã 6 số đều được coi là hợp lệ (chưa nối API xác thực OTP thật).
-    navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Main' }] }));
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      await verifyEmail(userId, otp);
+      navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'Main' }] }));
+    } catch (error) {
+      showToast(getApiErrorMessage(error, 'Mã OTP không đúng hoặc đã hết hạn'), 'danger');
+      setOtp('');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -57,7 +78,7 @@ export function RegisterOtpScreen() {
           </View>
           <View className="flex-1">
             <Text className="font-label-caption text-label-caption text-secondary font-semibold uppercase tracking-wider">
-              Xác thực số điện thoại
+              Xác thực email
             </Text>
             <Text className="font-body-sm text-body-sm text-on-surface-variant">
               Hoàn tất bước cuối để kích hoạt ví PMPay của bạn
@@ -72,13 +93,18 @@ export function RegisterOtpScreen() {
           onResend={handleResend}
           description={
             <>
-              Mã OTP 6 chữ số vừa được gửi đến số điện thoại{' '}
-              <Text className="font-semibold text-on-surface">{maskPhoneNumber(phone)}</Text> qua tin nhắn SMS
+              Mã OTP 6 chữ số vừa được gửi đến email{' '}
+              <Text className="font-semibold text-on-surface">{email}</Text>
             </>
           }
         />
 
-        <Button label="Kích hoạt tài khoản" onPress={handleConfirm} disabled={otp.length !== OTP_LENGTH} />
+        <Button
+          label="Kích hoạt tài khoản"
+          onPress={handleConfirm}
+          disabled={otp.length !== OTP_LENGTH}
+          loading={submitting}
+        />
 
         <View className="flex-row items-center justify-center gap-1.5">
           <Icon name="lock" size={16} color={colors.secondary} />

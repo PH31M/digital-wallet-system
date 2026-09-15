@@ -97,7 +97,7 @@ class AuthControllerTest {
                 }
                 """;
         AuthResponse response = new AuthResponse("access-token", "refresh-token",
-                new UserProfileResponse(UUID.randomUUID(), "test@example.com", "Nguyen Van A", false));
+                new UserProfileResponse(UUID.randomUUID(), "test@example.com", "Nguyen Van A", null, false));
 
         when(authService.login(any(), any(), any())).thenReturn(response);
 
@@ -211,6 +211,47 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.error.field").value("full_name"));
+    }
+
+    @Test
+    void register_fullNameContainsHtml_returnsValidationFailedWithFieldFullName() throws Exception {
+        String body = """
+                {
+                  "email": "test@example.com",
+                  "full_name": "<script>alert(1)</script>",
+                  "password": "Str0ng@Pass"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.field").value("full_name"));
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    void register_phoneNumberContainsHtml_returnsValidationFailedWithFieldPhoneNumber() throws Exception {
+        String body = """
+                {
+                  "email": "test@example.com",
+                  "full_name": "Nguyen Van A",
+                  "phoneNumber": "<script>alert(1)</script>",
+                  "password": "Str0ng@Pass"
+                }
+                """;
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error.field").value("phone_number"));
+
+        verifyNoInteractions(authService);
     }
 
     @Test

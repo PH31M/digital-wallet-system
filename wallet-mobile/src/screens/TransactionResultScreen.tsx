@@ -6,6 +6,7 @@ import { CommonActions, useNavigation, useRoute, RouteProp } from '@react-naviga
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Icon, IconName } from '../components/Icon';
 import { StackHeader } from '../components/StackHeader';
+import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { colors } from '../theme/tokens';
 import { RootStackParamList, TransactionKind, TransactionResultVariant } from '../navigation/RootNavigator';
@@ -86,6 +87,7 @@ function formatTimestamp(date: Date): string {
 export function TransactionResultScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'TransactionResult'>>();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const params = route.params;
   const config = VARIANT_CONFIG[params.variant];
@@ -95,6 +97,7 @@ export function TransactionResultScreen() {
   const [copied, setCopied] = useState(false);
 
   async function handleCopyCode() {
+    if (!params.transactionCode) return;
     await Clipboard.setStringAsync(params.transactionCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -113,7 +116,7 @@ export function TransactionResultScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <StackHeader title={config.headerTitle} onBack={() => navigation.goBack()} avatarName="Nguyễn Văn An" />
+      <StackHeader title={config.headerTitle} onBack={() => navigation.goBack()} avatarName={user?.fullName ?? ''} />
       <ScrollView className="flex-1 px-gutter-mobile" contentContainerStyle={{ paddingVertical: 16, gap: 16 }}>
         {/* Hero status */}
         <View className="items-center pt-1 pb-2">
@@ -147,19 +150,34 @@ export function TransactionResultScreen() {
         </View>
 
         {/* Pending safety banner */}
-        {params.variant === 'pending' && (
-          <View className="rounded-md p-space-md flex-row items-start gap-space-sm" style={{ backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
-            <Icon name="shield_with_heart" size={22} color="#D97706" />
+        {params.variant === 'pending' && params.pendingReason === 'externalGateway' ? (
+          <View className="rounded-md p-space-md flex-row items-start gap-space-sm" style={{ backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <Icon name="schedule" size={22} color="#2563EB" />
             <View className="flex-1 gap-1">
-              <Text className="font-label-md font-semibold" style={{ color: '#78350F' }}>
-                Kiểm tra an toàn tự động
+              <Text className="font-label-md font-semibold" style={{ color: '#1E3A8A' }}>
+                Đang chờ MoMo xác nhận
               </Text>
-              <Text className="font-body-sm text-body-sm leading-relaxed" style={{ color: '#92400E' }}>
-                Giao dịch vượt hạn mức thông thường hoặc kích hoạt quy tắc an toàn. Chuyên viên Quản trị rủi ro PMPay
-                đang xử lý (dự kiến trong 3 - 5 phút). Tiền trong ví tạm thời được giữ an toàn.
+              <Text className="font-body-sm text-body-sm leading-relaxed" style={{ color: '#1E40AF' }}>
+                Hoàn tất thanh toán trên MoMo nếu bạn chưa làm — ví PMPay sẽ tự động được cộng tiền ngay khi MoMo xác
+                nhận (thường trong vài giây), không cần làm gì thêm ở đây.
               </Text>
             </View>
           </View>
+        ) : (
+          params.variant === 'pending' && (
+            <View className="rounded-md p-space-md flex-row items-start gap-space-sm" style={{ backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A' }}>
+              <Icon name="shield_with_heart" size={22} color="#D97706" />
+              <View className="flex-1 gap-1">
+                <Text className="font-label-md font-semibold" style={{ color: '#78350F' }}>
+                  Kiểm tra an toàn tự động
+                </Text>
+                <Text className="font-body-sm text-body-sm leading-relaxed" style={{ color: '#92400E' }}>
+                  Giao dịch vượt hạn mức thông thường hoặc kích hoạt quy tắc an toàn. Chuyên viên Quản trị rủi ro PMPay
+                  đang xử lý (dự kiến trong 3 - 5 phút). Tiền trong ví tạm thời được giữ an toàn.
+                </Text>
+              </View>
+            </View>
+          )
         )}
 
         {/* Receipt card */}
@@ -171,11 +189,13 @@ export function TransactionResultScreen() {
               </Text>
               <View className="flex-row items-center gap-space-xs mt-0.5">
                 <Text numberOfLines={1} className="font-numeric-ledger text-numeric-ledger text-primary font-semibold">
-                  {params.transactionCode}
+                  {params.transactionCode ?? '— (giao dịch chưa được tạo)'}
                 </Text>
-                <Pressable onPress={handleCopyCode} className="w-7 h-7 rounded-full bg-surface-container-high items-center justify-center">
-                  <Icon name={copied ? 'check' : 'content_copy'} size={15} color={colors.primary} />
-                </Pressable>
+                {params.transactionCode && (
+                  <Pressable onPress={handleCopyCode} className="w-7 h-7 rounded-full bg-surface-container-high items-center justify-center">
+                    <Icon name={copied ? 'check' : 'content_copy'} size={15} color={colors.primary} />
+                  </Pressable>
+                )}
               </View>
             </View>
             <View className="flex-row items-center px-2.5 py-1 rounded-full" style={{ backgroundColor: config.statusBg }}>
@@ -233,7 +253,7 @@ export function TransactionResultScreen() {
               </Text>
             </View>
             <View className="h-px bg-surface-container-high" />
-            {params.variant === 'completed' && (
+            {params.variant === 'completed' && params.balanceAfter !== undefined && (
               <View className="flex-row items-center justify-between pt-1">
                 <Text className="font-label-md text-label-md text-on-surface-variant">Số dư còn lại</Text>
                 <Text className="font-headline-sm text-headline-sm text-primary font-bold">
@@ -274,10 +294,10 @@ export function TransactionResultScreen() {
             </View>
             <View className="flex-1 gap-1">
               <Text className="font-label-md text-label-md font-semibold" style={{ color: colors.error }}>
-                Lý do: Vượt hạn mức ngày hoặc số dư không đủ (ERR-4032)
+                Lý do: {params.failureReason ?? 'Giao dịch không thành công'}
               </Text>
               <Text className="font-body-sm text-body-sm text-on-surface-variant leading-relaxed">
-                Vui lòng nạp thêm tiền vào ví PMPay hoặc kiểm tra lại hạn mức chuyển khoản sinh trắc học theo QĐ 2345.
+                Vui lòng kiểm tra lại số dư, hạn mức giao dịch hoặc thử lại sau ít phút.
               </Text>
             </View>
           </View>

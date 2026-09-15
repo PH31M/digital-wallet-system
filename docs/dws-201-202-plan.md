@@ -1,5 +1,11 @@
 # DWS-201 & DWS-202 — Kế hoạch hoàn thành chi tiết
 
+> ✅ **ĐÃ HOÀN THÀNH (15/09/2026)** — toàn bộ subtask DWS-208 → DWS-216 bên dưới đã có code
+> thật: `AdminUserServiceTest`/`AdminUserControllerTest`, `AuditLogSpecifications` +
+> `GET /api/admin/audit-logs` với đủ filter, API xem/thu hồi session theo admin
+> (`/users/{userId}/sessions`), whitelist sort field, và cả export CSV (vốn đánh dấu Optional).
+> Giữ lại làm tài liệu tham khảo thiết kế, không dùng làm nguồn kế hoạch nữa.
+
 Sau DWS-204 (Monitoring), đây là bước tiếp theo theo đúng thứ tự ưu tiên đã đề xuất: bổ sung phần còn thiếu cho 2 Story đã có code (Quản lý user & Audit log) — rủi ro cao nhất hiện tại vì đây là quyền admin nhưng gần như chưa có test.
 
 ## DWS-201 — Quản lý người dùng cho Admin (4 subtask còn lại)

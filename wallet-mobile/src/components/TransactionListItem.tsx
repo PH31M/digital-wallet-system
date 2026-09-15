@@ -1,7 +1,10 @@
 import { Pressable, Text, View } from 'react-native';
 import { Icon, IconName } from './Icon';
+import { StatusBadgeStatus } from './StatusBadge';
 import { colors } from '../theme/tokens';
 import { formatCurrency } from '../utils/formatCurrency';
+import { TransactionStatus } from '../types/api';
+import { mapTransactionStatusToBadge, mapTransactionStatusToLabel } from '../utils/mapTransactionStatus';
 
 type TransactionListItemProps = {
   icon: IconName;
@@ -9,10 +12,33 @@ type TransactionListItemProps = {
   subtitle: string;
   amount: number;
   direction: 'in' | 'out';
-  /** Trạng thái "chờ duyệt admin" (rút tiền lớn) khác PENDING_REVIEW gian lận thông thường — dùng
-   * đúng badge chấm nhấp nháy riêng theo `code.html` gốc, không dùng chung StatusBadge. */
-  pendingApproval?: boolean;
+  /** Trạng thái thật từ TransactionResponse/TransactionHistoryItemResponse — đủ 6 giá trị,
+   * không còn rút gọn về 2 trạng thái (pendingApproval) như bản cũ. */
+  status: TransactionStatus;
   onPress?: () => void;
+};
+
+// Cùng 4 tông với StatusBadge (success/warning/danger/default) nhưng vẽ dạng "dot + pill" riêng
+// theo đúng code.html gốc của màn Lịch sử, không dùng chung component StatusBadge.
+const pillClassNameByTone: Record<StatusBadgeStatus, string> = {
+  success: 'bg-secondary-container/50',
+  warning: 'bg-primary-fixed',
+  danger: 'bg-error-container/60',
+  default: 'bg-surface-container-highest',
+};
+
+const dotClassNameByTone: Record<StatusBadgeStatus, string> = {
+  success: 'bg-secondary',
+  warning: 'bg-primary',
+  danger: 'bg-error',
+  default: 'bg-outline',
+};
+
+const textClassNameByTone: Record<StatusBadgeStatus, string> = {
+  success: 'text-secondary',
+  warning: 'text-primary',
+  danger: 'text-on-error-container',
+  default: 'text-on-surface-variant',
 };
 
 /**
@@ -26,17 +52,16 @@ export function TransactionListItem({
   subtitle,
   amount,
   direction,
-  pendingApproval = false,
+  status,
   onPress,
 }: TransactionListItemProps) {
-  const amountColor = direction === 'in' ? 'text-secondary' : 'text-primary';
+  const tone = mapTransactionStatusToBadge(status);
+  const label = mapTransactionStatusToLabel(status).toUpperCase();
+  const amountColor = tone === 'danger' ? 'text-danger' : direction === 'in' ? 'text-secondary' : 'text-primary';
   const sign = direction === 'in' ? '+' : '-';
-  const iconContainerClassName = pendingApproval
-    ? 'bg-surface-container-highest'
-    : direction === 'in'
-      ? 'bg-secondary-container/60'
-      : 'bg-surface-container';
-  const iconColor = direction === 'in' && !pendingApproval ? colors.secondary : colors.primary;
+  const iconContainerClassName =
+    tone !== 'success' ? 'bg-surface-container-highest' : direction === 'in' ? 'bg-secondary-container/60' : 'bg-surface-container';
+  const iconColor = direction === 'in' && tone === 'success' ? colors.secondary : colors.primary;
 
   return (
     <Pressable onPress={onPress} className="flex-row items-center justify-between p-3.5">
@@ -58,16 +83,10 @@ export function TransactionListItem({
           {sign}
           {formatCurrency(amount)}
         </Text>
-        {pendingApproval ? (
-          <View className="flex-row items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-primary-fixed">
-            <View className="w-1.5 h-1.5 rounded-full bg-primary" />
-            <Text className="font-label-caption text-label-caption text-primary font-bold">CHỜ DUYỆT</Text>
-          </View>
-        ) : (
-          <View className="mt-1 px-2 py-0.5 rounded-full bg-secondary-container/50">
-            <Text className="font-label-caption text-label-caption text-secondary font-bold">THÀNH CÔNG</Text>
-          </View>
-        )}
+        <View className={`flex-row items-center gap-1 mt-1 px-2 py-0.5 rounded-full ${pillClassNameByTone[tone]}`}>
+          <View className={`w-1.5 h-1.5 rounded-full ${dotClassNameByTone[tone]}`} />
+          <Text className={`font-label-caption text-label-caption font-bold ${textClassNameByTone[tone]}`}>{label}</Text>
+        </View>
       </View>
     </Pressable>
   );

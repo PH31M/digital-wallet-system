@@ -56,7 +56,7 @@ class AdminDashboardControllerTest {
         mockMvc.perform(get("/api/admin/dashboard/overview"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.totalUsers").value(10));
+                .andExpect(jsonPath("$.data.total_users").value(10));
     }
 
     @Test
@@ -80,7 +80,7 @@ class AdminDashboardControllerTest {
         mockMvc.perform(get("/api/admin/dashboard/volume").param("days", "7"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.days").value(7))
-                .andExpect(jsonPath("$.data.series[0].transactionCount").value(3));
+                .andExpect(jsonPath("$.data.series[0].transaction_count").value(3));
 
         verify(dashboardService).getDailyVolume(7);
     }

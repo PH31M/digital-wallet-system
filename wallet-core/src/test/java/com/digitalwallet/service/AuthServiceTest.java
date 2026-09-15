@@ -105,6 +105,26 @@ class AuthServiceTest {
     }
 
     @Test
+    void register_returnsPhoneNumberInUserProfile() {
+        // Regression: AuthService dùng nhầm constructor 4-tham số của UserProfileResponse
+        // (không có phoneNumber) — phone luôn null trong AuthResponse dù lưu đúng vào DB, chỉ
+        // phát hiện khi test end-to-end với Postgres/mobile thật, không phải qua unit test cũ.
+        AuthService authService = authService();
+        RegisterRequest request = new RegisterRequest("phone@example.com", "Nguyen Van A", "Str0ng@Pass");
+        request.setPhoneNumber("0987654321");
+
+        when(userRepository.existsByEmail("phone@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("Str0ng@Pass")).thenReturn("bcrypt-hash");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(jwtTokenProvider.generateAccessToken(any(User.class))).thenReturn("access-token");
+        when(jwtTokenProvider.generateRefreshToken(any(User.class))).thenReturn("refresh-token");
+
+        AuthResponse response = authService.register(request, httpRequest, UUID.randomUUID());
+
+        assertThat(response.getUser().getPhoneNumber()).isEqualTo("0987654321");
+    }
+
+    @Test
     void register_emailAlreadyExists_throwsEmailAlreadyExists() {
         AuthService authService = authService();
         RegisterRequest request = new RegisterRequest("dup@example.com", "Nguyen Van A", "Str0ng@Pass");
@@ -176,6 +196,24 @@ class AuthServiceTest {
         assertThat(user.getLastLoginAt()).isNotNull();
         verify(auditService).log(user, AuditActorType.USER, AuditAction.USER_LOGIN_SUCCESS,
                 "USER", user.getId(), "127.0.0.1", "JUnit", requestId);
+    }
+
+    @Test
+    void login_returnsPhoneNumberInUserProfile() {
+        AuthService authService = authService();
+        LoginRequest request = new LoginRequest("user@example.com", "Str0ng@Pass");
+        User user = user("user@example.com", "Nguyen Van A", "bcrypt-hash");
+        user.setPhoneNumber("0987654321");
+
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Str0ng@Pass", "bcrypt-hash")).thenReturn(true);
+        when(userRepository.save(user)).thenReturn(user);
+        when(jwtTokenProvider.generateAccessToken(user)).thenReturn("access-token");
+        when(jwtTokenProvider.generateRefreshToken(user)).thenReturn("refresh-token");
+
+        AuthResponse response = authService.login(request, httpRequest, UUID.randomUUID());
+
+        assertThat(response.getUser().getPhoneNumber()).isEqualTo("0987654321");
     }
 
     @Test

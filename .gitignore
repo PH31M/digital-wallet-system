@@ -1,3 +1,6 @@
+# Local AI tooling config (Claude Code session/launch config, not project code)
+.claude/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

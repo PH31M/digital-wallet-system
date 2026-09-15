@@ -4,6 +4,7 @@ import com.digitalwallet.api.dto.request.TransferRequest;
 import com.digitalwallet.api.dto.request.WalletAmountRequest;
 import com.digitalwallet.api.dto.response.LedgerEntryResponse;
 import com.digitalwallet.api.dto.response.TransactionResponse;
+import com.digitalwallet.api.dto.response.WalletLookupResponse;
 import com.digitalwallet.api.dto.response.WalletResponse;
 import com.digitalwallet.common.request.RequestMetadata;
 import com.digitalwallet.domain.entity.FraudAssessment;
@@ -25,6 +26,7 @@ import com.digitalwallet.domain.event.TransactionCompletedEvent;
 import com.digitalwallet.domain.event.TransactionFailedEvent;
 import com.digitalwallet.domain.repository.LedgerEntryRepository;
 import com.digitalwallet.domain.repository.TransactionRepository;
+import com.digitalwallet.domain.repository.UserRepository;
 import com.digitalwallet.domain.repository.WalletRepository;
 import com.digitalwallet.exception.BusinessException;
 import com.digitalwallet.exception.ErrorCode;
@@ -51,6 +53,7 @@ public class WalletService {
     private final WalletRepository walletRepository;
     private final TransactionRepository transactionRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final UserRepository userRepository;
     private final FraudService fraudService;
     private final TransactionLimitService transactionLimitService;
     private final AuditService auditService;
@@ -60,13 +63,14 @@ public class WalletService {
     private final BigDecimal otpRequiredAmount;
 
     public WalletService(WalletRepository walletRepository, TransactionRepository transactionRepository,
-            LedgerEntryRepository ledgerEntryRepository, FraudService fraudService,
+            LedgerEntryRepository ledgerEntryRepository, UserRepository userRepository, FraudService fraudService,
             TransactionLimitService transactionLimitService, AuditService auditService,
             ApplicationEventPublisher eventPublisher, OtpService otpService, EmailOtpService emailOtpService,
             @Value("${wallet.otp.required-amount:5000000}") BigDecimal otpRequiredAmount) {
         this.walletRepository = walletRepository;
         this.transactionRepository = transactionRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
+        this.userRepository = userRepository;
         this.fraudService = fraudService;
         this.transactionLimitService = transactionLimitService;
         this.auditService = auditService;
@@ -87,6 +91,47 @@ public class WalletService {
         Wallet wallet = walletRepository.findByUserId(currentUser.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
         return toWalletResponse(wallet);
+    }
+
+    /**
+     * Tra cứu ví người nhận theo email hoặc số điện thoại — cần cho màn Chuyển tiền tìm UUID
+     * ví thật (mobile không có cách nào khác lấy được receiver_wallet_id). Chỉ trả về
+     * wallet_id + tên đã che bớt + trạng thái ví, KHÔNG trả email/SĐT/số dư của người khác.
+     */
+    @Transactional(readOnly = true)
+    public WalletLookupResponse lookupRecipient(String identifier) {
+        String normalized = identifier == null ? "" : identifier.trim().toLowerCase();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED, "Identifier is required");
+        }
+
+        User recipient = userRepository.findByEmail(normalized)
+                .or(() -> userRepository.findByPhoneNumber(normalized))
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        Wallet wallet = walletRepository.findByUserId(recipient.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.RESOURCE_NOT_FOUND));
+
+        return new WalletLookupResponse(wallet.getId(), maskName(recipient.getFullName()), wallet.getStatus().name());
+    }
+
+    private String maskName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return "";
+        }
+        String[] words = fullName.trim().split("\\s+");
+        StringBuilder masked = new StringBuilder();
+        for (int i = 0; i < words.length; i++) {
+            if (i > 0) {
+                masked.append(' ');
+            }
+            String word = words[i];
+            masked.append(word.charAt(0));
+            if (word.length() > 1) {
+                masked.append("*".repeat(word.length() - 1));
+            }
+        }
+        return masked.toString();
     }
 
     @Transactional(noRollbackFor = BusinessException.class)
@@ -122,6 +167,74 @@ public class WalletService {
         publishTransactionCompleted(completed,
                 TransactionCompletedEvent.Recipient.of(currentUser, NotificationType.TRANSACTION_RECEIVED));
         return TransactionResponse.from(completed);
+    }
+
+    /**
+     * Tạo transaction DEPOSIT ở trạng thái chờ (PENDING) cho luồng nạp tiền qua cổng thanh toán
+     * ngoài (MoMo) — KHÔNG cộng tiền ngay vì tiền chưa thực sự về (chỉ về khi gateway xác nhận
+     * qua IPN, xem MomoPaymentService). Vẫn chạy đúng check hạn mức ngày + fraud rule như
+     * deposit() thường, để không tạo lỗ hổng "né" các rule này chỉ vì đi qua MoMo.
+     *
+     * CHALLENGE/BLOCK ở bước này bị từ chối thẳng (không redirect user sang MoMo) thay vì giữ
+     * PENDING_REVIEW như deposit() thường — vì lúc này người dùng CHƯA trả tiền, không có lý do
+     * để họ trả tiền thật rồi mới biết giao dịch bị treo chờ duyệt thủ công.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public Transaction initiateExternalDeposit(User currentUser, BigDecimal amount, String idempotencyKey,
+            RequestMetadata metadata) {
+        Wallet wallet = lockCurrentUserWallet(currentUser);
+        ensureActive(wallet);
+
+        Transaction transaction = newTransaction(TransactionType.DEPOSIT, amount, idempotencyKey);
+        transaction.setReceiverWallet(wallet);
+        assertWithinLimitOrFail(transaction, currentUser, metadata, wallet);
+
+        Transaction saved = transactionRepository.save(transaction);
+        FraudDecision decision = assessFraud(saved);
+        if (decision != FraudDecision.ALLOW) {
+            saved.fail();
+            Transaction failed = transactionRepository.save(saved);
+            AuditAction action = decision == FraudDecision.BLOCK ? AuditAction.FRAUD_BLOCKED : AuditAction.FRAUD_CHALLENGE;
+            audit(failed, currentUser, action, metadata);
+            eventPublisher.publishEvent(TransactionFailedEvent.of(
+                    currentUser, failed, ErrorCode.MOMO_AMOUNT_NOT_SUPPORTED.getDefaultMessage()));
+            throw new BusinessException(ErrorCode.MOMO_AMOUNT_NOT_SUPPORTED);
+        }
+
+        // assessFraud() chỉ set fraudScore/fraudDecision trên object trong bộ nhớ - lưu lại để
+        // không mất thông tin chấm điểm khi IPN đến sau (request/transaction khác) đọc lại từ DB.
+        Transaction persisted = transactionRepository.save(saved);
+        audit(persisted, currentUser, AuditAction.MOMO_PAYMENT_INITIATED, metadata);
+        return persisted;
+    }
+
+    /**
+     * Hoàn tất transaction DEPOSIT đang PENDING sau khi cổng thanh toán ngoài (MoMo) xác nhận
+     * đã nhận tiền - tái dùng đúng cơ chế ghi ledger/khoá ví/kiểm tra hạn mức của
+     * completePendingDeposit(), giống hệt approvePendingReview() dùng cho fraud review, để
+     * không viết lại logic cộng tiền lần thứ 2.
+     */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public TransactionResponse completeMomoDeposit(Transaction transaction, RequestMetadata metadata) {
+        User initiator = initiatorFor(transaction);
+        transaction.setStatus(TransactionStatus.PROCESSING);
+        List<TransactionCompletedEvent.Recipient> recipients = completePendingDeposit(transaction, initiator);
+
+        transaction.complete();
+        Transaction completed = transactionRepository.save(transaction);
+        audit(completed, initiator, AuditAction.DEPOSIT_COMPLETED, metadata);
+        publishTransactionCompleted(completed, recipients.toArray(TransactionCompletedEvent.Recipient[]::new));
+        return TransactionResponse.from(completed);
+    }
+
+    /** Đánh trượt transaction DEPOSIT đang PENDING khi MoMo báo resultCode != 0 hoặc lỗi tạo request. */
+    @Transactional(noRollbackFor = BusinessException.class)
+    public void failExternalDeposit(Transaction transaction, RequestMetadata metadata, String reason) {
+        User initiator = initiatorFor(transaction);
+        transaction.fail();
+        Transaction failed = transactionRepository.save(transaction);
+        audit(failed, initiator, AuditAction.TRANSACTION_FAILED, metadata);
+        eventPublisher.publishEvent(TransactionFailedEvent.of(initiator, failed, reason));
     }
 
     @Transactional(noRollbackFor = BusinessException.class)

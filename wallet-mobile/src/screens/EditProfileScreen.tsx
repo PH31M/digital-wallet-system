@@ -19,7 +19,7 @@ export function EditProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { showToast } = useToast();
 
-  const [fullName, setFullName] = useState(mockUserProfile.full_name);
+  const [fullName, setFullName] = useState(mockUserProfile.fullName);
   const [phone, setPhone] = useState('0987 654 321');
   const [nickname, setNickname] = useState('An Nguyen PM');
 
@@ -34,12 +34,12 @@ export function EditProfileScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <DetailHeader title="Chỉnh Sửa Hồ Sơ" onBack={() => navigation.goBack()} avatarName={mockUserProfile.full_name} />
+      <DetailHeader title="Chỉnh Sửa Hồ Sơ" onBack={() => navigation.goBack()} avatarName={mockUserProfile.fullName} />
       <ScrollView className="flex-1 px-gutter-mobile" contentContainerStyle={{ paddingVertical: 16, gap: 24 }}>
         {/* Avatar section */}
         <View className="items-center pt-1 pb-2">
           <View style={{ position: 'relative' }}>
-            <Avatar name={mockUserProfile.full_name} size={96} />
+            <Avatar name={mockUserProfile.fullName} size={96} />
             <Pressable
               onPress={comingSoon}
               className="w-8 h-8 rounded-full bg-primary-container items-center justify-center shadow-sm"

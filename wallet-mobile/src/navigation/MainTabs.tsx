@@ -1,7 +1,9 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { Icon, IconName } from '../components/Icon';
 import { colors } from '../theme/tokens';
+import { getUnreadNotificationCountApi } from '../api/notificationApi';
 import { HomeScreen } from '../screens/HomeScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
@@ -28,6 +30,12 @@ function TabIcon({ name, color, showDot = false }: { name: IconName; color: stri
 }
 
 export function MainTabs() {
+  const unreadCountQuery = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: getUnreadNotificationCountApi,
+  });
+  const hasUnreadNotifications = (unreadCountQuery.data ?? 0) > 0;
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -59,7 +67,7 @@ export function MainTabs() {
         component={NotificationsScreen}
         options={{
           title: 'Thông báo',
-          tabBarIcon: ({ color }) => <TabIcon name="notifications" color={color} showDot />,
+          tabBarIcon: ({ color }) => <TabIcon name="notifications" color={color} showDot={hasUnreadNotifications} />,
         }}
       />
       <Tab.Screen

@@ -1,47 +1,55 @@
-# Wallet Core Module
+# wallet-core
 
-## Cấu trúc thư mục chính
+Spring Boot 3 (Java 17) REST API for the digital wallet — the source of truth for accounts, balances, and transactions. See the [root README](../README.md) for the project overview and how the mobile app fits in.
 
-- `src/main/java/com/digitalwallet/`
-  - `WalletCoreApplication.java` - entry point của ứng dụng Spring Boot.
-  - `config/` - cấu hình Spring Boot, security, JWT, Redis, async và WebSocket.
-  - `security/` - các lớp liên quan đến JWT và authentication filter.
-  - `domain/` - business domain, entity, enum, repository và service.
-  - `api/` - REST layer, controller, DTO request/response và exception advice.
-  - `constant/` - hằng số dùng chung.
-  - `exception/` - custom exception.
-  - `util/` - class tiện ích dùng trong toàn bộ ứng dụng.
-  - `websocket/` - xử lý WebSocket và event publishing.
+## Package layout
 
-- `src/main/resources/`
-  - `application.properties` - cấu hình Spring Boot mặc định.
-  - `db/migration/` - Flyway SQL migration.
+```
+src/main/java/com/digitalwallet/
+  api/          REST controllers + request/response DTOs
+  common/       shared response envelope (ApiResponse/ErrorInfo), request metadata
+  config/       Spring config: Security, JWT, Redis, Async, WebSocket, MoMo, rate limiting
+  domain/       JPA entities, enums, Spring Data repositories
+  exception/    business exceptions + GlobalExceptionHandler (maps to ErrorCode)
+  security/     JWT filter/provider, token blacklist, rate-limit filter, @CurrentUser
+  service/      business logic — Auth, Wallet, Fraud, Audit, Notification, Momo...
+  util/         ReferenceNumberGenerator, IdempotencyService
 
-## Luồng hoạt động chính
+src/main/resources/
+  application.yml     config (reads everything from .env via Spring's config import)
+  db/migration/        Flyway SQL migrations (V1...V8) — schema changes go here, not ddl-auto
+```
 
-1. `WalletCoreApplication` khởi chạy Spring Boot và scan tất cả component trong `com.digitalwallet`.
-2. `SecurityConfig` định nghĩa rule bảo mật chung cho toàn bộ API.
-3. `JwtConfig` đọc cấu hình JWT từ properties/yaml.
-4. `RedisConfig` cấu hình kết nối đến Redis.
-5. `AsyncConfig` cung cấp thread pool cho các tác vụ bất đồng bộ.
-6. `WebSocketConfig` đăng ký endpoint STOMP và broker nội bộ.
-7. `AuthController` xử lý login/register.
-8. `WalletController` cung cấp endpoint lấy thông tin ví.
-9. Các entity trong `domain/entity` biểu diễn bảng dữ liệu.
-10. Repository trong `domain/repository` thực hiện truy vấn database.
-11. `exception/` định nghĩa lỗi nghiệp vụ, ví dụ `InsufficientBalanceException`, `WalletFrozenException`.
-12. `util/` chứa helper dùng chung như `ReferenceNumberGenerator` và `IdempotencyService`.
+## Feature areas
 
-## Hướng dẫn dùng file mới
+- **Auth** — register/login with email OTP verification, JWT access + refresh rotation with reuse detection, optional MFA (email OTP), forgot/reset password, session management, account lockout after repeated failed logins.
+- **Wallet** — deposit/withdraw/transfer with a double-entry ledger, idempotency keys, pessimistic row locking (deadlock-safe ordering on transfers), OTP confirmation on large transfers/withdrawals, daily money-movement limits.
+- **Fraud** — rule-based scoring (challenge/block by amount threshold) with an admin review queue for challenged transactions.
+- **MoMo** — top-up via the MoMo AIO v2 gateway; only the signed IPN callback (never the browser return URL) can finalize a payment. See `service/Momo*.java`.
+- **Admin** — user management (role/lock), audit log with filtering + CSV export, dashboard overview/volume metrics — all under `/api/admin/**`, role-gated.
+- **Notifications** — in-app notifications + email (transaction confirmations, security alerts), pushed over WebSocket/STOMP.
+- **Ops** — Actuator health/metrics (role-gated except `/actuator/health`), Prometheus scrape endpoint, structured logging with a request-id on every log line.
 
-- Nếu muốn thêm endpoint mới, tạo thêm controller trong `api/controller` và DTO tương ứng trong `api/dto/request` hoặc `api/dto/response`.
-- Nếu cần thêm nghiệp vụ mới, tạo service trong `domain/service` và dùng repository tương ứng.
-- Nếu thêm bảng mới, tạo entity trong `domain/entity` và migration SQL trong `src/main/resources/db/migration`.
-- Nếu cần thay đổi luật bảo mật, chỉnh `SecurityConfig`.
-- Nếu cần cấu hình thêm JWT, thay đổi `JwtConfig` và cấu hình trong `application.properties`.
+## Running it
 
-## Ghi chú
+```bash
+docker-compose up -d postgres redis mailhog   # + prometheus, grafana if you want dashboards
+cp .env.example .env                          # fill in JWT_SECRET at minimum
+mvn spring-boot:run                           # http://localhost:8089
+```
 
-- Package gốc phải là `com.digitalwallet` để Spring Boot scan đủ các component.
-- Đã dùng Jakarta Persistence (`jakarta.persistence.*`) cho Spring Boot 4.
-- `application.properties` hiện chỉ cấu hình tên ứng dụng. Các cấu hình database, JWT, Redis cần thêm khi triển khai thực tế.
+`GET /actuator/health` is public; everything else requires a JWT except `/api/auth/**` and `/api/momo/**` (signature-verified instead of JWT).
+
+## Testing
+
+```bash
+mvn test
+```
+
+33 test files covering auth (token rotation, lockout, MFA), the money-movement flows (idempotency, limits, fraud), admin endpoints (permission checks via `@WithMockUser`), and the MoMo signature service (valid signature, tampered-field rejection).
+
+## Local dev notes
+
+- Schema changes go through Flyway migrations only (`ddl-auto: validate` — Hibernate will refuse to start if the schema and entities disagree, which has caught real mapping bugs, e.g. `@Lob` mapping a `text` column to Postgres `oid` instead).
+- MoMo's sandbox calls your `MOMO_REDIRECT_URL`/`MOMO_IPN_URL` directly — `localhost` won't work for real sandbox testing; tunnel with `ngrok http 8089` and point those two vars at the tunnel URL.
+- If a migration's checksum drifts from what Flyway recorded (e.g. you edited an already-applied migration locally), `mvn flyway:repair` fixes the recorded checksum without touching data.
